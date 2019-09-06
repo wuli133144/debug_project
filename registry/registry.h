@@ -53,8 +53,9 @@ int execute_ctor_funcs();
 int execute_dtor_funcs();
 
 int execute_test_funcs();
+int execute_test_funcs_cunit();
 int execute_test_designated_func(char *func_name, void *arg1, void *arg2);
-
+int execute_test_cunit_designated_func(char *func_name, void *arg1, void *arg2);
 
 int assert_equal(void *peer1, void *peer2, unsigned int count);
 

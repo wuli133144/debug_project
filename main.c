@@ -28,13 +28,13 @@ REGISTER_STANDALONE_TEST_CUNIT_FUNC(testfunc1);
 
 int main(int argc,char **argv) {
     //argc = 0;
-    if (argc > 0) {
+    if (argc > 2) {
         int targc = argc - 1;
         //printf("=====%s===",argv[1]);
         //execute_test_designated_func(argv[1], (void *)&targc, argv + 1);
         execute_test_cunit_designated_func(argv[1], (void *)&targc, argv + 1);
     } else {
-        execute_test_funcs();
+        execute_test_funcs_cunit();
     }
   return 0;
 }

@@ -41,6 +41,7 @@
 
 reg_heap_t *global_testfunc_reg_heap = NULL;
 reg_heap_t *global_testfunc_cunit_reg_heap = NULL;
+static inline void run_cunit_case(init_func_entry_t *element);
 
 static int greater_than(void *element1, void *element2) 
 {
@@ -208,6 +209,32 @@ int execute_test_funcs()
             }
             free(element);
         } else {
+        }
+    }
+
+    reg_heap_destroy(reg_heap);
+
+    return 0;
+}
+
+int execute_test_funcs_cunit() 
+{
+    int i, size = 0, ret;
+    init_func_entry_t *element;
+    reg_heap_t * reg_heap = get_global_testfunc_cunit_reg_heap();
+
+    size = reg_heap_size(reg_heap);
+    for(i=0; i< size; i++){
+        reg_heap_remove(reg_heap, (void **)&element);
+
+        if (element->type == FUNC_ENTRY_TYPE_STANDALONE) {
+            continue;
+        }
+        if (element->args_count > 3) {
+            free(element);
+            element = NULL;
+        } else {
+             run_cunit_case(element);
         }
     }
 
