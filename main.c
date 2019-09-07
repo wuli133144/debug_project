@@ -8,7 +8,8 @@
 //curl test
 
 #include <curl/curl.h>
-
+//#include <3rd/json-c-0.9/json.h>
+#include <json/json.h>
 static inline int testfunc(TEST_ENTRY *entry) {
     printf("testfunc running====");
     int ret = 1;
@@ -58,6 +59,79 @@ static inline int testcurlGet(TEST_ENTRY *entry)
     return 0;
 }
 REGISTER_STANDALONE_TEST_CUNIT_FUNC(testcurlGet);
+
+static inline int testjson_c(TEST_ENTRY * entry) 
+{
+    //array 
+    json_object * jobj = NULL;
+    int i = 0;
+    jobj = json_object_new_array();
+    json_object_array_add(jobj,json_object_new_string("wuyujie"));
+    json_object_array_add(jobj,json_object_new_string("wuyujie1"));
+    json_object_array_add(jobj,json_object_new_string("wuyujie2"));
+    json_object_array_add(jobj,json_object_new_string("wuyujie3"));
+    json_object_array_add(jobj,json_object_new_string("wuyujie4"));
+    json_object_array_add(jobj,json_object_new_string("wuyujie5"));
+
+    //printf("%s",json_object_to_json_string(jobj));
+
+    CU_ASSERT_EQUAL(json_object_array_length(jobj),6);
+    
+    CU_ASSERT_STRING_EQUAL(json_object_get_string(json_object_array_get_idx(jobj,0)),"wuyujie");
+
+    for (i = 0;i < json_object_array_length(jobj);i++) {
+        if (i > 0) {
+            char buf[100] = {0};
+            sprintf(buf,"wuyujie%d",i);
+            CU_ASSERT_STRING_EQUAL(json_object_get_string(json_object_array_get_idx(jobj,i)),buf);
+        }else {
+            CU_ASSERT_STRING_EQUAL(json_object_get_string(json_object_array_get_idx(jobj,i)),"wuyujie");
+        }
+    }
+    
+    return 1;
+}
+REGISTER_STANDALONE_TEST_CUNIT_FUNC(testjson_c);
+
+static inline int testjson_c1(TEST_ENTRY *entry) 
+{
+    //construct json object
+    json_object * root = NULL;
+    json_object * array = NULL;
+    json_object * name = NULL;
+
+    root = json_object_new_object();
+    if (root == NULL) {
+        printf("construct object json failed");
+        return -1;
+    }
+    
+    array = json_object_new_array();
+    if (!array) {
+        goto error;
+    }
+    json_object_array_add(array,json_object_new_string("test1"));
+    json_object_array_add(array,json_object_new_string("test2"));
+    json_object_array_add(array,json_object_new_string("test3"));
+
+    name = json_object_new_string("name");
+    if (!name) {
+        goto error;
+    }
+
+    json_object_object_add(root,"array",array);
+    json_object_object_add(root,"name",name);
+
+    printf("%s",json_object_to_json_string(root));
+    json_object_put(root);
+
+    return 1;
+    
+error:
+    json_object_put(root);
+    return 0;
+}
+REGISTER_STANDALONE_TEST_CUNIT_FUNC(testjson_c1);
 
 int main(int argc,char **argv) {
     //argc = 0;

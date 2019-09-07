@@ -5,6 +5,7 @@ message("start compile this prj")
 
 set(CMAKE_INSTALL_PREFIX ${PROJECT_SOURCE_DIR})
 set(REGISTER_INCDIR ${PROJECT_SOURCE_DIR})
+set(SOURCE_INC_DIR ${REGISTER_INCDIR}/include)
 set(REGISTER_SOURCE 
            ctor.c
            dtor.c 
@@ -41,7 +42,7 @@ else()
     endif(CMAKE_COMPILER_GNUCC)
 endif(MSVC)
 
-include_directories(${REGISTER_INCDIR})
+include_directories(${REGISTER_INCDIR} ${SOURCE_INC_DIR})
 
 file(GLOB_RECURSE libraries ${PROJECT_LIB_DIR}/*.so)
 foreach(l ${libraries})
@@ -102,7 +103,7 @@ if(CURL_ON)
         COMMAND make 
         COMMAND make install
         #COMMAND ln -sf ${PROJECT_SOURCE_DIR}/include/* ${PROJECT_SOURCE_DIR}/
-        COMMAND cp -rf ${PROJECT_SOURCE_DIR}/include/curl/lib/*  ${PROJECT_SOURCE_DIR}/lib 
+        #COMMAND cp -rf ${PROJECT_SOURCE_DIR}/include/curl/lib/*  ${PROJECT_SOURCE_DIR}/lib 
         WORKING_DIRECTORY ${CURL_FILE_DIR}
         COMMENT "build curl===================="
     )    
@@ -128,7 +129,7 @@ if(JSON_ON)
         COMMAND make 
         COMMAND make install
         #COMMAND ln -sf ${PROJECT_SOURCE_DIR}/curldest/include/* ${PROJECT_SOURCE_DIR}/
-        COMMAND cp -rf ${PROJECT_SOURCE_DIR}/include/json/lib/*  ${PROJECT_SOURCE_DIR}/lib 
+        #COMMAND cp -rf ${PROJECT_SOURCE_DIR}/include/json/lib/*  ${PROJECT_SOURCE_DIR}/lib 
         WORKING_DIRECTORY ${JSON_FILE_DIR}
         COMMENT "build json===================="
     )    
