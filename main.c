@@ -38,7 +38,7 @@ static inline size_t handlecallback(void *buffer,size_t size,size_t nmemb,void *
     //printf("%s",pbuf);
     return size*nmemb;
 }
-//test curl 
+
 static inline int testcurlGet(TEST_ENTRY *entry) 
 {
     CURL *handle = curl_easy_init();

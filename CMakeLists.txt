@@ -90,7 +90,7 @@ message(STATUS "=================${PROJECT_SOURCE_DIR}===================")
 if(CURL_ON)
     set(CURL_FILES)
     set(CURL_SRC_DIR curl-7.57.0)
-    set(CURL_FILE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/${CURL_SRC_DIR})
+    set(CURL_FILE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/3rd/${CURL_SRC_DIR})
 
     add_custom_target(curl ALL)
     add_custom_command(
@@ -98,17 +98,45 @@ if(CURL_ON)
         PRE_BUILD  
         COMMAND chmod +x buildconf 
         COMMAND ./buildconf 
-        COMMAND ./configure --prefix=${PROJECT_SOURCE_DIR}/curldest --disable-static 
+        COMMAND ./configure --prefix=${PROJECT_SOURCE_DIR} --disable-static 
         COMMAND make 
         COMMAND make install
-        COMMAND ln -sf ${PROJECT_SOURCE_DIR}/curldest/include/* ${PROJECT_SOURCE_DIR}/
-        COMMAND cp -rf ${PROJECT_SOURCE_DIR}/curldest/lib/*  ${PROJECT_SOURCE_DIR}/lib 
+        #COMMAND ln -sf ${PROJECT_SOURCE_DIR}/include/* ${PROJECT_SOURCE_DIR}/
+        COMMAND cp -rf ${PROJECT_SOURCE_DIR}/include/curl/lib/*  ${PROJECT_SOURCE_DIR}/lib 
         WORKING_DIRECTORY ${CURL_FILE_DIR}
         COMMENT "build curl===================="
     )    
 endif(CURL_ON)
 
 ##########################end###############################
+
+#######################install json-c########################
+
+option(JSON_ON "start build json" OFF)
+message(STATUS "=================${PROJECT_SOURCE_DIR}===================")
+if(JSON_ON)
+    set(JSON_FILES)
+    set(JSON_SRC_DIR json-c-0.9)
+    set(JSON_FILE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/3rd/${JSON_SRC_DIR})
+
+    add_custom_target(json ALL)
+    add_custom_command(
+        TARGET json
+        PRE_BUILD 
+        COMMAND chmod +x configure  
+        COMMAND ./configure --prefix=${PROJECT_SOURCE_DIR} --disable-static 
+        COMMAND make 
+        COMMAND make install
+        #COMMAND ln -sf ${PROJECT_SOURCE_DIR}/curldest/include/* ${PROJECT_SOURCE_DIR}/
+        COMMAND cp -rf ${PROJECT_SOURCE_DIR}/include/json/lib/*  ${PROJECT_SOURCE_DIR}/lib 
+        WORKING_DIRECTORY ${JSON_FILE_DIR}
+        COMMENT "build json===================="
+    )    
+endif(JSON_ON)
+
+##########################end###############################
+
+
 
 install(TARGETS ngwf_db test  
         LIBRARY DESTINATION /usr/lib

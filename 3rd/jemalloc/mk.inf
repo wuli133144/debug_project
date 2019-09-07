@@ -1,0 +1,28 @@
+
+JEMALLOCDIR = compile
+
+SRCS = jemalloc-4.0.0
+
+all::
+	cd $(JEMALLOCDIR); \
+	$(MAKE) && cd ..; \
+
+	@if [ ! -d $(TOPDIR)/include/jemalloc ]; then \
+		ln -sf $(TOPDIR)/$(THEDIR)/$(JEMALLOCDIR)/include/jemalloc $(TOPDIR)/include/jemalloc; \
+	fi; \
+	cp -rf $(JEMALLOCDIR)/lib/libjemalloc.so* $(TOPDIR)/libs/
+
+prepare::
+	@if [ -d $(JEMALLOCDIR) ]; then \
+		rm -rf $(JEMALLOCDIR); \
+	fi; \
+	cp $(SRCDIR)/$(THEDIR)/$(SRCS) -rf $(JEMALLOCDIR); \
+	cd $(JEMALLOCDIR) && chmod +x ./autogen.sh && ./autogen.sh $(ARCH) && cd ..
+
+clean::
+	cd $(JEMALLOCDIR); \
+	make clean; \
+	cd ..
+
+install::
+	cp -rf $(JEMALLOCDIR)/lib/libjemalloc.so* $(DSTDIR)/lib/

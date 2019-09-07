@@ -1,0 +1,45 @@
+# mk.inf
+
+#CCMODE = PROGRAM
+SRCS = json-c-0.9
+JSONDIR = json-c-0.9
+
+all::
+	cd $(JSONDIR) && make;\
+#	ln -sf .libs/libjson.so.0.0.1 $(TOPDIR)/libs/libjson.so;\
+#	ln -sf .libs/libjson.so.0.0.1 $(TOPDIR)/libs/libjson.so.0;\
+	cp -rf .libs/libjson.so* 	$(TOPDIR)/libs/; \
+	cp -rf .libs/libjson.a	$(TOPDIR)/libs/
+	cd ..;
+
+prepare::
+	mkdir $(JSONDIR);\
+	cd $(JSONDIR);\
+	if [ ! -f Makefile ]; then \
+		if [ "$(ARCH)"x = "aarch64"x ]; then \
+			$(SRCDIR)/$(THEDIR)/$(SRCS)/configure CFLAGS="-O2 -fPIC" --build=x86_64-linux-gnu --host=aarch64-linux-gnu --enable-shared; \
+		else \
+			$(SRCDIR)/$(THEDIR)/$(SRCS)/configure CFLAGS="-O2 -fPIC"; \
+		fi; \
+	fi; \
+	mkdir -p 	$(TOPDIR)/include/cp/json/;\
+	ln -sf $(SRCDIR)/$(THEDIR)/$(SRCS)/arraylist.h  $(TOPDIR)/include/cp/json/arraylist.h;\
+	ln -sf $(SRCDIR)/$(THEDIR)/$(SRCS)/bits.h  $(TOPDIR)/include/cp/json/bits.h; \
+	ln -sf $(SRCDIR)/$(THEDIR)/$(SRCS)/json.h  $(TOPDIR)/include/cp/json/json.h;\
+	ln -sf $(SRCDIR)/$(THEDIR)/$(SRCS)/debug.h  $(TOPDIR)/include/cp/json/debug.h;\
+	ln -sf $(SRCDIR)/$(THEDIR)/$(SRCS)/json_object.h  $(TOPDIR)/include/cp/json/json_object.h;\
+	ln -sf $(SRCDIR)/$(THEDIR)/$(SRCS)/json_object_private.h  $(TOPDIR)/include/cp/json/json_object_private.h;\
+	ln -sf $(SRCDIR)/$(THEDIR)/$(SRCS)/json_tokener.h  $(TOPDIR)/include/cp/json/json_tokener.h;\
+	ln -sf $(SRCDIR)/$(THEDIR)/$(SRCS)/json_util.h  $(TOPDIR)/include/cp/json/json_util.h;\
+	ln -sf $(SRCDIR)/$(THEDIR)/$(SRCS)/linkhash.h  $(TOPDIR)/include/cp/json/linkhash.h;\
+	ln -sf $(SRCDIR)/$(THEDIR)/$(SRCS)/printbuf.h  $(TOPDIR)/include/cp/json/printbuf.h;\
+	cd ..;\
+
+clean::
+	cd  $(JSONDIR) && make clean; 
+
+install::
+	cp -f $(JSONDIR)/.libs/libjson.so.0.0.1  $(DSTDIR)/lib/
+	ln -sf $(DSTDIR)/lib/libjson.so.0.0.1 $(DSTDIR)/lib/libjson.so
+	ln -sf $(DSTDIR)/lib/libjson.so.0.0.1 $(DSTDIR)/lib/libjson.so.0 
+
