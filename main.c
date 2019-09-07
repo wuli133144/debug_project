@@ -1,8 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <registry/registry.h>
+
 
 #define CUNIT_DEBUG
+#include <registry/registry.h>
 
 static inline int testfunc(TEST_ENTRY *entry) {
     printf("testfunc running====");
@@ -28,7 +29,7 @@ REGISTER_STANDALONE_TEST_CUNIT_FUNC(testfunc1);
 
 int main(int argc,char **argv) {
     //argc = 0;
-    if (argc > 2) {
+    if (argc > 1) {
         int targc = argc - 1;
         //printf("=====%s===",argv[1]);
         //execute_test_designated_func(argv[1], (void *)&targc, argv + 1);

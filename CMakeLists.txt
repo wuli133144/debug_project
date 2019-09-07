@@ -34,9 +34,9 @@ else()
         -Wno-missing-field-initializers
         -Wno-implicit-function-declaration)
     else()
-    message(ERROR_FATAL,"compiler_c not support exit")
+        message(ERROR_FATAL,"compiler_c not support exit")
     endif(CMAKE_COMPILER_GNUCC)
-endif()
+endif(MSVC)
 
 include_directories(${REGISTER_INCDIR})
 
@@ -44,9 +44,37 @@ add_executable(test main.c ${REGISTER_SOURCE})
 
 target_link_libraries(test cunit m pthread)
 
+#add_custom_target(libngwf_db.so ALL)
+
+# set(PROTOBUFFILES)
+
+# file(GLOB_RECURSE SOURCE_FILES ${PROJECT_SOURCE_DIR}/protobuf/*.proto)
+
+# foreach(current_files ${SOURCE_FILES})
+#     message(STATUS "========${current_files}========")    
+#     set(PROTOBUF_FILES)
+#     #add_custom_target(ngwf_db ALL DEPENDS ${PROTOBUF_FILES})
+#     add_custom_command(OUTPUT ${PROTOBUF_FILES}
+#         PRE_BUILD
+#         COMMAND protoc -I=${PROJECT_SOURCE_DIR}/protobuf --cpp_out=${PROTOBUF_FILES} ${current_files}
+#         DEPENDS ${current_files}
+#         COMMENT "protoc build success"
+#     )
+    
+#     list(APPEND PROTOBUFFILES ${PROTOBUF_FILES})
+# endforeach()
+# add_custom_target(ngwf_d1b ALL DEPENDS ${PROTOBUFFILES})    
 
 add_library(ngwf_db SHARED ${REGISTER_SOURCE})
 target_link_libraries(ngwf_db cunit m pthread)
+
+#add_custom_target()
+#add_custom_target() ,执行一条命令
+
+#foreach 
+
+#test protoc 
+#add_custom_target(ngwf_db DEPENDS ${PROTOBUFILES})
 
 
 install(TARGETS ngwf_db test  
