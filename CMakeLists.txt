@@ -3,7 +3,7 @@ project(test_var)
 
 message("start compile this prj")
 
-#set(CMAKE_INSTALL_PREFIX ${PROJECT_SOURCE_DIR})
+set(CMAKE_INSTALL_PREFIX ${PROJECT_SOURCE_DIR})
 set(REGISTER_INCDIR ${PROJECT_SOURCE_DIR})
 set(REGISTER_SOURCE 
            ctor.c
@@ -13,6 +13,9 @@ set(REGISTER_SOURCE
 set(REGISTER_HEADERFILES 
     ${PROJECT_SOURCE_DIR}/registry/reg_heap.h 
     ${PROJECT_SOURCE_DIR}/registry/registry.h)
+
+set(PROJECT_LIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/lib)
+set(PROJECT_LIB)
 
 if (MSVC)
     # warning level 4 and all warnings as errors
@@ -40,9 +43,14 @@ endif(MSVC)
 
 include_directories(${REGISTER_INCDIR})
 
+file(GLOB_RECURSE libraries ${PROJECT_LIB_DIR}/*.so)
+foreach(l ${libraries})
+    list(APPEND PROJECT_LIB ${l})
+endforeach()
+
 add_executable(test main.c ${REGISTER_SOURCE})
 
-target_link_libraries(test cunit m pthread)
+target_link_libraries(test cunit m pthread ${PROJECT_LIB})
 
 #add_custom_target(libngwf_db.so ALL)
 
@@ -75,7 +83,32 @@ target_link_libraries(ngwf_db cunit m pthread)
 
 #test protoc 
 #add_custom_target(ngwf_db DEPENDS ${PROTOBUFILES})
+#######################install curl########################
 
+option(CURL_ON "start build curl" OFF)
+message(STATUS "=================${PROJECT_SOURCE_DIR}===================")
+if(CURL_ON)
+    set(CURL_FILES)
+    set(CURL_SRC_DIR curl-7.57.0)
+    set(CURL_FILE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/${CURL_SRC_DIR})
+
+    add_custom_target(curl ALL)
+    add_custom_command(
+        TARGET curl
+        PRE_BUILD  
+        COMMAND chmod +x buildconf 
+        COMMAND ./buildconf 
+        COMMAND ./configure --prefix=${PROJECT_SOURCE_DIR}/curldest --disable-static 
+        COMMAND make 
+        COMMAND make install
+        COMMAND ln -sf ${PROJECT_SOURCE_DIR}/curldest/include/* ${PROJECT_SOURCE_DIR}/
+        COMMAND cp -rf ${PROJECT_SOURCE_DIR}/curldest/lib/*  ${PROJECT_SOURCE_DIR}/lib 
+        WORKING_DIRECTORY ${CURL_FILE_DIR}
+        COMMENT "build curl===================="
+    )    
+endif(CURL_ON)
+
+##########################end###############################
 
 install(TARGETS ngwf_db test  
         LIBRARY DESTINATION /usr/lib

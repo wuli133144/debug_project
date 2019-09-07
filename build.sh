@@ -2,4 +2,7 @@
 rm -rf CMakeFiles  CMakeCache.txt    cmake_install.cmake  Makefile
 cmake .
 make
-#make install
+make install
+
+rm -rf *.so 
+rm -rf test 
