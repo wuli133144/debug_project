@@ -1,3 +1,4 @@
+
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -10,6 +11,8 @@
 #include <curl/curl.h>
 //#include <3rd/json-c-0.9/json.h>
 #include <json/json.h>
+#include <jemalloc/jemalloc.h>
+
 static inline int testfunc(TEST_ENTRY *entry) {
     printf("testfunc running====");
     int ret = 1;
@@ -133,11 +136,19 @@ error:
 }
 REGISTER_STANDALONE_TEST_CUNIT_FUNC(testjson_c1);
 
+static inline int  test_jemalloc(TEST_ENTRY * entry) 
+{   
+    void *p = je_malloc(1);
+    CU_ASSERT_PTR_NOT_EQUAL(p,NULL);
+    je_free(p);
+    return 1;
+}
+REGISTER_STANDALONE_TEST_CUNIT_FUNC(test_jemalloc);
+
 int main(int argc,char **argv) {
     //argc = 0;
     
     curl_global_init(CURL_GLOBAL_ALL);
-    //curl_easy_getinfo(handle,)
     if (argc > 1) {
         int targc = argc - 1;
         //printf("=====%s===",argv[1]);

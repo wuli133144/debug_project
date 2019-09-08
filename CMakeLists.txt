@@ -3,6 +3,31 @@ project(test_var)
 
 message("start compile this prj")
 
+
+include (mk/util.cmake)
+init_platform()
+project (libobject)
+config_platform()
+
+# The version number.
+set (LIBOBJECT_VERSION_MAJOR 1)
+set (LIBOBJECT_VERSION_MINOR 0)
+# Set the output folder where your program will be created
+set (CMAKE_MACOSX_RPATH 1)
+# Debug/Release settings
+#set (CMAKE_BUILD_TYPE "Debug")
+
+display_configs("${PLATFORM}")
+
+#find_package(PkgConfig)
+#find_package(opengl)
+#find_package(CURL)
+
+option (MODULE_UI "ui module" OFF)
+option (MODULE_BUS "bus module" OFF)
+
+
+
 set(CMAKE_INSTALL_PREFIX ${PROJECT_SOURCE_DIR})
 set(REGISTER_INCDIR ${PROJECT_SOURCE_DIR})
 set(SOURCE_INC_DIR ${REGISTER_INCDIR}/include)
@@ -15,8 +40,8 @@ set(REGISTER_HEADERFILES
     ${PROJECT_SOURCE_DIR}/registry/reg_heap.h 
     ${PROJECT_SOURCE_DIR}/registry/registry.h)
 
-set(PROJECT_LIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/lib)
-set(PROJECT_LIB)
+set(PROJECT_LIB_DIR ${PROJECT_SOURCE_DIR}/lib)
+set(PROJECT_LIB cunit m pthread)
 
 if (MSVC)
     # warning level 4 and all warnings as errors
@@ -43,44 +68,77 @@ else()
 endif(MSVC)
 
 include_directories(${REGISTER_INCDIR} ${SOURCE_INC_DIR})
-
-file(GLOB_RECURSE libraries ${PROJECT_LIB_DIR}/*.so)
+#link_libraries()
+file(GLOB libraries ${PROJECT_LIB_DIR}/*.so)
 foreach(l ${libraries})
-    list(APPEND PROJECT_LIB ${l})
+    #list(APPEND PROJECT_LIB ${l})
+    link_libraries(${l})
+    message(STATUS "=====================lib ${l}=====================")
 endforeach()
 
+link_directories(${PROJECT_SOURCE_DIR}/lib/)
 add_executable(test main.c ${REGISTER_SOURCE})
 
-target_link_libraries(test cunit m pthread ${PROJECT_LIB})
+target_link_libraries(test  ${PROJECT_LIB})
 
-#add_custom_target(libngwf_db.so ALL)
-
-# set(PROTOBUFFILES)
-
-# file(GLOB_RECURSE SOURCE_FILES ${PROJECT_SOURCE_DIR}/protobuf/*.proto)
-
-# foreach(current_files ${SOURCE_FILES})
-#     message(STATUS "========${current_files}========")    
-#     set(PROTOBUF_FILES)
-#     #add_custom_target(ngwf_db ALL DEPENDS ${PROTOBUF_FILES})
-#     add_custom_command(OUTPUT ${PROTOBUF_FILES}
-#         PRE_BUILD
-#         COMMAND protoc -I=${PROJECT_SOURCE_DIR}/protobuf --cpp_out=${PROTOBUF_FILES} ${current_files}
-#         DEPENDS ${current_files}
-#         COMMENT "protoc build success"
-#     )
-    
-#     list(APPEND PROTOBUFFILES ${PROTOBUF_FILES})
-# endforeach()
-# add_custom_target(ngwf_d1b ALL DEPENDS ${PROTOBUFFILES})    
-
+ 
 add_library(ngwf_db SHARED ${REGISTER_SOURCE})
 target_link_libraries(ngwf_db cunit m pthread)
 
-#add_custom_target()
-#add_custom_target() ,执行一条命令
 
 #foreach 
+
+######################libobject#####################
+
+
+find_source_files(Source_Files)
+find_main_file(Main_File)
+
+if (Main_File)
+    list(REMOVE_ITEM Source_Files ${Main_File} )
+    message("-- Main file path: ${Main_File}")
+endif ()
+
+if (MODULE_UI)
+    message("-- Turn ui module on")
+    #find_package(SDL2 REQUIRED)
+    SET(ExternalLibs ${ExternalLibs} SDL2 SDL2_ttf)
+else ()
+    message(WARNING "-- Turn ui module off-----------")
+    find_module_files(Exclude_UI_Module_Files ui)
+    exclude_files(Source_Files "${Source_Files}" "${Exclude_UI_Module_Files}")
+endif ()
+
+if (MODULE_BUS)
+    message("-- Turn bus module on")
+    find_package(SDL2 REQUIRED)
+else ()
+    message("-- Turn bus module off")
+    find_module_files(Exclude_BUS_Module_Files bus)
+    exclude_files(Source_Files "${Source_Files}" "${Exclude_BUS_Module_Files}")
+endif ()
+
+ADD_LIBRARY(object SHARED ${Source_Files})
+
+if(EXISTS "${ExternalLibs}")
+    message(STATUS "depend_lib:${ExternalLibs}")
+    target_link_libraries(object ${ExternalLibs})
+else()
+    message(STATUS "not found depend_lib ExternalLibs")
+    SET(ExternalLibs ${ExternalLibs} pthread m json)
+    target_link_libraries(object ${ExternalLibs})
+endif(EXISTS "${ExternalLibs}")
+
+#add_executable(test_object ${Main_File})
+#target_link_libraries(test_object object)
+
+SET_TARGET_PROPERTIES (object PROPERTIES VERSION 1.2 SOVERSION 1)
+
+#install (TARGETS test_object DESTINATION bin)
+install (DIRECTORY ${LIBRARY_DIR_PATH} DESTINATION lib)
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/src/include/libobject DESTINATION include)
+#####################################################
+
 
 #test protoc 
 #add_custom_target(ngwf_db DEPENDS ${PROTOBUFILES})
@@ -137,6 +195,32 @@ endif(JSON_ON)
 
 ##########################end###############################
 
+
+#######################install jemalloc########################
+
+option(JEMALLOC_ON "start build JEmalloc" OFF)
+message(STATUS "=================${PROJECT_SOURCE_DIR}===================")
+if(JEMALLOC_ON)
+    set(JEMALLOC_FILES)
+    set(JEMALLOC_SRC_DIR jemalloc-4.2.1)
+    set(JEMALLOC_FILE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/3rd/${JEMALLOC_SRC_DIR})
+    add_definitions(-DJEMALLOC_NO_DEMANGLE)
+    add_custom_target(jemalloc ALL)
+    add_custom_command(
+        TARGET jemalloc
+        PRE_BUILD
+        COMMAND chmod -R 777 ${JEMALLOC_FILE_DIR}
+        COMMAND ./configure --prefix=${PROJECT_SOURCE_DIR} --disable-static 
+        COMMAND make 
+        COMMAND make install
+        #COMMAND ln -sf ${PROJECT_SOURCE_DIR}/curldest/include/* ${PROJECT_SOURCE_DIR}/
+        #COMMAND cp -rf ${PROJECT_SOURCE_DIR}/include/json/lib/*  ${PROJECT_SOURCE_DIR}/lib 
+        WORKING_DIRECTORY ${JEMALLOC_FILE_DIR}
+        COMMENT "build JEMALLOC===================="
+    )    
+endif(JEMALLOC_ON)
+
+##########################end###############################
 
 
 install(TARGETS ngwf_db test  
