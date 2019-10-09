@@ -6,7 +6,8 @@
 enum allocator_type{
     ALLOCATOR_TYPE_SYS_MALLOC = 0,
     ALLOCATOR_TYPE_CTR_MALLOC,
-    ALLOCATOR_TYPE_LAST
+    ALLOCATOR_TYPE_LAST,
+    ALLOCATOR_TYPE_CTR_JEMALLOC
 };
 
 typedef struct allocator{

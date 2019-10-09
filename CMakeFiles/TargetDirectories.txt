@@ -1,1 +1,3 @@
-/usr/local/test/CMakeFiles/test_var.dir
+/usr/local/test/CMakeFiles/ngwf_db.dir
+/usr/local/test/CMakeFiles/object.dir
+/usr/local/test/CMakeFiles/test.dir

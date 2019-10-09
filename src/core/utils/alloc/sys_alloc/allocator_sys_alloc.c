@@ -41,6 +41,19 @@ static void __free(allocator_t *alloc, void *addr)
     free(addr);
 }
 
+#ifdef __JEMALLOC_ALLOC
+static void *jemalloc_alloc(allocator_t *alloc,uint32_t size)
+{
+    return je_malloc(size);
+}
+
+static void jemalloc_free(allocator_t *alloc,void *addr)
+{
+    return je_free(addr);
+}
+
+#endif
+
 int allocator_sys_alloc_register(){
     allocator_module_t salloc = {
         .allocator_type = ALLOCATOR_TYPE_SYS_MALLOC, 
@@ -52,6 +65,18 @@ int allocator_sys_alloc_register(){
         }
     };
     memcpy(&allocator_modules[ALLOCATOR_TYPE_SYS_MALLOC], &salloc, sizeof(allocator_module_t));
+    #ifdef __JEMALLOC_ALLOC
+        allocator_module_t salloc_jemalloc = {
+        .allocator_type = ALLOCATOR_TYPE_SYS_MALLOC, 
+        .alloc_ops = {
+            .init    = NULL, 
+            .alloc   = jemalloc_alloc, 
+            .free    = jemalloc_free, 
+            .destroy = NULL, 
+        }
+    };
+    memcpy(&allocator_modules[ALLOCATOR_TYPE_CTR_JEMALLOC], &salloc_jemalloc, sizeof(allocator_module_t));
+    #endif 
     return 0;
 }
 REGISTER_CTOR_FUNC(REGISTRY_CTOR_PRIORITY_LIBALLOC_REGISTER_MODULES, 
