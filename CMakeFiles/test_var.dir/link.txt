@@ -1,1 +1,0 @@
-/usr/bin/cc      CMakeFiles/test_var.dir/main.c.o  -o test_var -rdynamic 
