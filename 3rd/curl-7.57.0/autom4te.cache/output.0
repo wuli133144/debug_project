@@ -1984,10 +1984,11 @@ Optional Packages:
   --without-ca-bundle     Don't use a default CA bundle
   --with-ca-path=DIRECTORY 
                           Path to a directory containing CA certificates
-                          stored individually, with their filenames in a hash
-                          format. This option can be used with OpenSSL, GnuTLS
-                          and PolarSSL backends. Refer to OpenSSL c_rehash for
-                          details. (example: /etc/certificates)
+                          stored individually, with \ their filenames in a
+                          hash format. This option can be used with OpenSSL,
+                          \ GnuTLS and PolarSSL backends. Refer to OpenSSL
+                          c_rehash for details. \ (example:
+                          /etc/certificates)
   --without-ca-path       Don't use a default CA path
   --with-ca-fallback      Use the built in CA store of the SSL library
   --without-ca-fallback   Don't use the built in CA store of the SSL library

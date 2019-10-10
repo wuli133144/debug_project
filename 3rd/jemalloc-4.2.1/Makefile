@@ -12,15 +12,15 @@ CC := gcc
 
 # Configuration parameters.
 DESTDIR =
-BINDIR := $(DESTDIR)/usr/local/test/bin
-INCLUDEDIR := $(DESTDIR)/usr/local/test/include
-LIBDIR := $(DESTDIR)/usr/local/test/lib
-DATADIR := $(DESTDIR)/usr/local/test/share
-MANDIR := $(DESTDIR)/usr/local/test/share/man
+BINDIR := $(DESTDIR)/usr/local/test_clibrary/bin
+INCLUDEDIR := $(DESTDIR)/usr/local/test_clibrary/include
+LIBDIR := $(DESTDIR)/usr/local/test_clibrary/lib
+DATADIR := $(DESTDIR)/usr/local/test_clibrary/share
+MANDIR := $(DESTDIR)/usr/local/test_clibrary/share/man
 srcroot := 
 objroot := 
-abs_srcroot := /usr/local/test/3rd/jemalloc-4.2.1/
-abs_objroot := /usr/local/test/3rd/jemalloc-4.2.1/
+abs_srcroot := /usr/local/test_clibrary/3rd/jemalloc-4.2.1/
+abs_objroot := /usr/local/test_clibrary/3rd/jemalloc-4.2.1/
 
 # Build parameters.
 CPPFLAGS :=  -D_GNU_SOURCE -D_REENTRANT -I$(srcroot)include -I$(objroot)include

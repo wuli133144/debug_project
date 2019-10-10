@@ -1,9 +1,9 @@
 # Directories...
-$prefix=/usr/local/test
+$prefix=/usr/local/test_clibrary
 $exec_prefix=${prefix}
 $bindir=${exec_prefix}/bin
 $confdir=${prefix}/etc
-$docdir=/usr/local/test/doc
+$docdir=/usr/local/test_clibrary/doc
 $mandir=${datarootdir}/man
 $libdir=${exec_prefix}/lib
 $srcdir=../..

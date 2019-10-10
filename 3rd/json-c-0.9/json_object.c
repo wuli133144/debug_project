@@ -214,8 +214,8 @@ static int json_object_object_to_json_string(struct json_object* jso,
   /* CAW: scope operator to make ANSI correctness */
   /* CAW: switched to json_object_object_foreachC which uses an iterator struct */
 	json_object_object_foreachC(jso, iter) {
-			if(i) sprintbuf(pb, ", ");
-			sprintbuf(pb, "\"");
+			if(i) sprintbuf(pb, ",");
+			sprintbuf(pb, " \"");
 			json_escape_str(pb, iter.key);
 			sprintbuf(pb, "\": ");
 			if(iter.val == NULL) sprintbuf(pb, "null");
@@ -223,7 +223,7 @@ static int json_object_object_to_json_string(struct json_object* jso,
 			i++;
 	}
 
-  return sprintbuf(pb, "}");
+  return sprintbuf(pb, " }");
 }
 
 static void json_object_lh_entry_free(struct lh_entry *ent)
@@ -319,10 +319,10 @@ boolean json_object_get_boolean(struct json_object *jso)
 static int json_object_int_to_json_string(struct json_object* jso,
 					  struct printbuf *pb)
 {
-  return sprintbuf(pb, "%ld", jso->o.c_int);
+  return sprintbuf(pb, "%d", jso->o.c_int);
 }
 
-struct json_object* json_object_new_int(long int i)
+struct json_object* json_object_new_int(int i)
 {
   struct json_object *jso = json_object_new(json_type_int);
   if(!jso) return NULL;
@@ -331,9 +331,9 @@ struct json_object* json_object_new_int(long int i)
   return jso;
 }
 
-long int json_object_get_int(struct json_object *jso)
+int json_object_get_int(struct json_object *jso)
 {
-  long int cint;
+  int cint;
 
   if(!jso) return 0;
   switch(jso->o_type) {
@@ -344,26 +344,7 @@ long int json_object_get_int(struct json_object *jso)
   case json_type_boolean:
     return jso->o.c_boolean;
   case json_type_string:
-    if(sscanf(jso->o.c_string, "%ld", &cint) == 1) return cint;
-  default:
-    return 0;
-  }
-}
-
-long int json_object_get_long_int(struct json_object *jso)
-{
-  long int cint;
-
-  if(!jso) return 0;
-  switch(jso->o_type) {
-  case json_type_int:
-    return jso->o.c_int;
-  case json_type_double:
-    return (int)jso->o.c_double;
-  case json_type_boolean:
-    return jso->o.c_boolean;
-  case json_type_string:
-    if(sscanf(jso->o.c_string, "%ld", &cint) == 1) return cint;
+    if(sscanf(jso->o.c_string, "%d", &cint) == 1) return cint;
   default:
     return 0;
   }
@@ -466,13 +447,13 @@ static int json_object_array_to_json_string(struct json_object* jso,
   for(i=0; i < json_object_array_length(jso); i++) {
 	  struct json_object *val;
 	  if(i) { sprintbuf(pb, ", "); }
-	  else { sprintbuf(pb, ""); }
+	  else { sprintbuf(pb, " "); }
 
       val = json_object_array_get_idx(jso, i);
 	  if(val == NULL) { sprintbuf(pb, "null"); }
 	  else { val->_to_json_string(val, pb); }
   }
-  return sprintbuf(pb, "]");
+  return sprintbuf(pb, " ]");
 }
 
 static void json_object_array_entry_free(void *data)
@@ -515,11 +496,6 @@ int json_object_array_length(struct json_object *jso)
 int json_object_array_add(struct json_object *jso,struct json_object *val)
 {
   return array_list_add(jso->o.c_array, val);
-}
-
-int json_object_array_push_idx(struct json_object *jso, int idx)
-{
-  return array_list_push_idx(jso->o.c_array, idx);
 }
 
 int json_object_array_put_idx(struct json_object *jso, int idx,

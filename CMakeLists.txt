@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.6)
+cmake_minimum_required(VERSION 2.8)
 project(test_var)
 
 message("start compile this prj")
@@ -20,9 +20,6 @@ set(current_dir ${CMAKE_CURRENT_SOURCE_DIR})
 set(root_dir)
 set(directory_inc "${current_dir}/include")
 get_filename_component(root_dir ${CMAKE_SOURCE_DIR} DIRECTORY)
-
-
-
 
 add_subdirectory(container)
 add_subdirectory(3rd)

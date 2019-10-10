@@ -216,8 +216,6 @@ extern int json_object_array_add(struct json_object *obj,
 extern int json_object_array_put_idx(struct json_object *obj, int idx,
 				     struct json_object *val);
 
-extern int json_object_array_push_idx(struct json_object *jso, int idx);
-
 /** Get the element at specificed index of the array (a json_object of type json_type_array)
  * @param obj the json_object instance
  * @param idx the index to get the element at
@@ -254,7 +252,7 @@ extern boolean json_object_get_boolean(struct json_object *obj);
  * @param i the integer
  * @returns a json_object of type json_type_int
  */
-extern struct json_object* json_object_new_int(long int i);
+extern struct json_object* json_object_new_int(int i);
 
 /** Get the int value of a json_object
  *
@@ -265,7 +263,7 @@ extern struct json_object* json_object_new_int(long int i);
  * @param obj the json_object instance
  * @returns an int
  */
-extern long int json_object_get_int(struct json_object *obj);
+extern int json_object_get_int(struct json_object *obj);
 
 
 /* double type methods */

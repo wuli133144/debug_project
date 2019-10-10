@@ -24,7 +24,7 @@ for t in $@; do
     echo
   fi
   echo "=== ${t} ==="
-  ${t} /usr/local/test/3rd/jemalloc-4.2.1/ /usr/local/test/3rd/jemalloc-4.2.1/
+  ${t} /usr/local/test_clibrary/3rd/jemalloc-4.2.1/ /usr/local/test_clibrary/3rd/jemalloc-4.2.1/
   result_code=$?
   case ${result_code} in
     ${pass_code})

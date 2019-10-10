@@ -4,9 +4,7 @@
 #include <string.h>
 
 #include "json.h"
-/*
-  gcc  test1.c  -o test1  -std=c99 -L /secgate/lib/  -ljson
-*/
+
 int main(int argc, char **argv)
 {
   json_tokener *tok;
@@ -37,15 +35,14 @@ int main(int argc, char **argv)
   my_array = json_object_new_array();
   json_object_array_add(my_array, json_object_new_int(1));
   json_object_array_add(my_array, json_object_new_int(2));
-  json_object_array_add(my_array, json_object_new_int(3000000000000000000));
+  json_object_array_add(my_array, json_object_new_int(3));
   json_object_array_put_idx(my_array, 4, json_object_new_int(5));
-  json_object_array_add(my_array, json_object_new_double(3));
   printf("my_array=\n");
   for(i=0; i < json_object_array_length(my_array); i++) {
     json_object *obj = json_object_array_get_idx(my_array, i);
     printf("\t[%d]=%s\n", i, json_object_to_json_string(obj));
   }
-  printf("my_array.to_string()=%s\n", json_object_to_json_string(my_array));
+  printf("my_array.to_string()=%s\n", json_object_to_json_string(my_array));    
 
   my_object = json_object_new_object();
   json_object_object_add(my_object, "abc", json_object_new_int(12));
@@ -155,7 +152,7 @@ int main(int argc, char **argv)
   if(is_error(new_obj)) printf("got error as expected\n");
   new_obj = json_tokener_parse_ex(tok, "\":13}}", 6);
   printf("new_obj.to_string()=%s\n", json_object_to_json_string(new_obj));
-  json_object_put(new_obj);
+  json_object_put(new_obj);  
   json_tokener_free(tok);
 
   json_object_put(my_string);

@@ -41,9 +41,6 @@ extern int
 array_list_put_idx(struct array_list *al, int i, void *data);
 
 extern int
-array_list_push_idx(struct array_list *al, int i);
-
-extern int
 array_list_add(struct array_list *al, void *data);
 
 extern int

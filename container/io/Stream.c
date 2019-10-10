@@ -33,7 +33,7 @@
 #include <libobject/core/utils/config/config.h>
 #include <libobject/core/utils/timeval/timeval.h>
 #include <libobject/core/utils/dbg/debug.h>
-#include <libobject/event/event_base.h>
+//#include <libobject/event/event_base.h>
 #include <libobject/io/Stream.h>
 
 static int __set(Stream *stream, char *attrib, void *value)

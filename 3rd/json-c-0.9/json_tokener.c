@@ -144,8 +144,8 @@ char* strndup(const char* str, size_t n)
  * json_tokener_parse_ex() consumed a lot of CPU in its main loop,
  * iterating character-by character.  A large performance boost is
  * achieved by using tighter loops to locally handle units such as
- * comments and strings.  Loops that handle an entire token within
- * their scope also gather entire strings and pass them to
+ * comments and strings.  Loops that handle an entire token within 
+ * their scope also gather entire strings and pass them to 
  * printbuf_memappend() in a single call, rather than calling
  * printbuf_memappend() one char at a time.
  *
@@ -167,7 +167,7 @@ char* strndup(const char* str, size_t n)
     ) :                                                                 \
    (((dest) = *str), 1)                                                 \
    )
-
+ 
 /* ADVANCE_CHAR() macro:
  *   Incrementes str & tok->char_offset.
  *   For convenience of existing conditionals, returns the old value of c (0 on eof)
@@ -310,7 +310,7 @@ struct json_object* json_tokener_parse_ex(struct json_tokener *tok,
             if (!ADVANCE_CHAR(str, tok) || !POP_CHAR(c, tok)) {
               printbuf_memappend_fast(tok->pb, case_start, str-case_start);
               goto out;
-            }
+            } 
           }
           printbuf_memappend_fast(tok->pb, case_start, 1+str-case_start);
           state = json_tokener_state_comment_end;
@@ -478,9 +478,9 @@ struct json_object* json_tokener_parse_ex(struct json_tokener *tok,
           printbuf_memappend_fast(tok->pb, case_start, case_len);
       }
       {
-        long int numi;
+        int numi;
         double numd;
-        if(!tok->is_double && sscanf(tok->pb->buf, "%ld", &numi) == 1) {
+        if(!tok->is_double && sscanf(tok->pb->buf, "%d", &numi) == 1) {
           current = json_object_new_int(numi);
         } else if(tok->is_double && sscanf(tok->pb->buf, "%lf", &numd) == 1) {
           current = json_object_new_double(numd);
