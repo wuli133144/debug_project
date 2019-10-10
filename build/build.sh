@@ -1,6 +1,6 @@
 #! /bin/bash
 rm -rf CMakeFiles  CMakeCache.txt    cmake_install.cmake  Makefile
-cmake .
+cmake ..
 make
 make install
 
