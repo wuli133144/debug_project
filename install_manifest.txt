@@ -1,4 +1,0 @@
-/usr/lib/libngwf_db.so
-/usr/local/test/bin/test
-/usr/include/registry/reg_heap.h
-/usr/include/registry/registry.h
