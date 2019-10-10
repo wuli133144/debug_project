@@ -1,0 +1,14 @@
+SUBDIRS = compiler stubs testing io
+
+LINKS = *.h
+
+HDRS = *.h
+
+INCDIR = google/protobuf
+
+SRCS = extension_set.cc generated_message_util.cc message_lite.cc \
+	   repeated_field.cc wire_format_lite.cc descriptor.cc descriptor.pb.cc \
+	   descriptor_database.cc dynamic_message.cc extension_set_heavy.cc \
+	   generated_message_reflection.cc message.cc reflection_ops.cc service.cc \
+	   text_format.cc unknown_field_set.cc wire_format.cc wire_format.cc
+

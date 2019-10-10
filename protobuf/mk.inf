@@ -1,0 +1,5 @@
+ifeq ($(ARCH),aarch64)
+    SUBDIRS = protobuf-c-0.15
+else
+    SUBDIRS = protobuf-2.5.0 protobuf-c-0.15 protos test
+endif

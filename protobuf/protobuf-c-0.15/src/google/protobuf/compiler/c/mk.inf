@@ -1,0 +1,5 @@
+LINKS = *.h
+
+SRCS = c_service.cc c_helpers.cc c_enum.cc c_enum_field.cc c_string_field.cc \
+	   c_primitive_field.cc c_extension.cc c_file.cc c_field.cc c_message.cc \
+	   c_generator.cc c_message_field.cc main.cc c_bytes_field.cc

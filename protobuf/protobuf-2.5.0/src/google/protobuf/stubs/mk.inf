@@ -1,0 +1,9 @@
+LINKS = *.h
+
+HDRS = *.h
+
+INCDIR = google/protobuf/stubs
+
+SRCS = atomicops_internals_x86_gcc.cc atomicops_internals_x86_msvc.cc \
+	common.cc once.cc stringprintf.cc strutil.cc substitute.cc \
+	structurally_valid.cc 

@@ -1,0 +1,10 @@
+LINKS = *.h
+
+HDRS = *.h
+
+INCDIR = google/protobuf/compiler/java
+
+SRCS = java_enum.cc java_enum_field.cc java_extension.cc java_field.cc \
+	   java_file.cc java_generator.cc java_helpers.cc java_message.cc \
+	   java_message_field.cc java_primitive_field.cc java_service.cc \
+	   java_string_field.cc java_doc_comment.cc

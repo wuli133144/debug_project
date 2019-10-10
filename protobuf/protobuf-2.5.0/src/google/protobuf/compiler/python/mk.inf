@@ -1,0 +1,7 @@
+LINKS = *.h
+
+HDRS = *.h
+
+INCDIR = google/protobuf/compiler/python
+
+SRCS = python_generator.cc

@@ -1,0 +1,8 @@
+LINKS = *.h
+
+HDRS = *.h
+
+INCDIR = google/protobuf/io
+
+SRCS = coded_stream.cc zero_copy_stream.cc zero_copy_stream_impl_lite.cc \
+	   gzip_stream.cc printer.cc tokenizer.cc zero_copy_stream_impl.cc 

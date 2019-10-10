@@ -1,0 +1,7 @@
+LINKS = *.h
+
+HDRS = *.h
+
+INCDIR = google/protobuf-c
+
+SRCS = protobuf-c-dispatch.c protobuf-c-data-buffer.c protobuf-c-rpc.c protobuf-c.c

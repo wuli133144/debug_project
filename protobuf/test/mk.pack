@@ -1,0 +1,7 @@
+CCMODE = PROGRAM
+
+TARGET = pack
+
+SRCS = pack.c
+
+LIBS = -L../protobuf-c-0.15/src -lprotobuf-c -lprotos

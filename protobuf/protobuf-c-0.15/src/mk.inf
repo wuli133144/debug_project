@@ -1,0 +1,13 @@
+SUBDIRS = google
+
+#SUBMKS = libprotobuf-c protoc-c
+SUBMKS = libprotobuf-c
+
+include $(TOPDIR)/rules.mak
+
+prepare::
+	$(MKDIR) .objs/google/protobuf-c
+	$(MKDIR) .objs/google/protobuf/compiler/c
+
+clean::
+	find .objs/ -name *.o | xargs rm -rf

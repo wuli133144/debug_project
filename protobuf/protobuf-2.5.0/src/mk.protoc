@@ -1,0 +1,10 @@
+CCMODE = PROGRAM
+
+TARGET = protoc
+
+CXXFLAGS := -Wwrite-strings -Woverloaded-virtual -Wno-sign-compare \
+	-DHAVE_CONFIG_H -I. -I.. -DNDEBUG -pthread
+
+SRCS = google/protobuf/compiler/main.cc
+
+LIBS = -lprotoc -lstdc++ -lpthread -lz

@@ -1,0 +1,10 @@
+SUBDIRS = cpp java python
+
+LINKS = *.h
+
+HDRS = *.h
+
+INCDIR = google/protobuf/compiler
+
+SRCS = main.cc importer.cc parser.cc code_generator.cc command_line_interface.cc \
+	   plugin.cc plugin.pb.cc subprocess.cc zip_writer.cc 

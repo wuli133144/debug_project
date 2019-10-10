@@ -1,0 +1,13 @@
+CCMODE = LIBRARY
+
+TARGET = libprotos
+
+PROTOS = env.proto
+
+LINKS = message_factory.map protoc-c
+
+HDRS = message_factory.h protos.h
+
+INCDIR = protos
+
+SRCS = env.pb-c.c message_factory.c

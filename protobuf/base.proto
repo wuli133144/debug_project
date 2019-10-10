@@ -1,7 +1,0 @@
-syntax = "proto2";
-
-package Base;
-
-message Test {
-    optional int32 a = 1;
-}
