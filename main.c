@@ -145,10 +145,18 @@ static inline int  test_jemalloc(TEST_ENTRY * entry)
 }
 REGISTER_STANDALONE_TEST_CUNIT_FUNC(test_jemalloc);
 
+__attribute__((constructor)) static void init() 
+{
+    curl_global_init(CURL_GLOBAL_ALL);
+}
+
+__attribute__((destructor)) static void finish()
+{
+    curl_global_cleanup();
+}
+
 int main(int argc,char **argv) {
     //argc = 0;
-    
-    curl_global_init(CURL_GLOBAL_ALL);
     if (argc > 1) {
         int targc = argc - 1;
         //printf("=====%s===",argv[1]);
@@ -157,6 +165,6 @@ int main(int argc,char **argv) {
     } else {
         execute_test_funcs_cunit();
     }
-    curl_global_cleanup();
+    
   return 0;
 }
