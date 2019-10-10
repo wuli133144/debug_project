@@ -1,0 +1,137 @@
+Index: patch/evp_sm4_20150602.diff
+===================================================================
+Index: openssl-1.0.1e/test/evptests.txt
+===================================================================
+--- openssl-1.0.1e/test/evptests.txt	(revision 23118)
++++ openssl-1.0.1e/test/evptests.txt	(working copy)
+@@ -171,6 +171,9 @@
+ aes-256-ctr:F6D66D6BD52D59BB0796365879EFF886C66DD51A5B6A99744B50590C87A23884:00FAAC24C1585EF15A43D87500000001:000102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F:F05E231B3894612C49EE000B804EB2A9B8306B508F839D6A5530831D9344AF1C:1
+ aes-256-ctr:FF7A617CE69148E4F1726E2F43581DE2AA62D9F805532EDFF1EED687FB54153D:001CC5B751A51D70A1C1114800000001:000102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F20212223:EB6C52821D0BBBF7CE7594462ACA4FAAB407DF866569FD07F48CC0B583D6071F1EC0E6B8:1
+ 
++# SM4 CBC tests
++SM4-128-CBC:0123456789ABCDEFFEDCBA9876543210::0123456789ABCDEFFEDCBA9876543210:e761fd7b6408d63de02fb46feb2da8f2
++
+ # DES ECB tests (from destest)
+ 
+ DES-ECB:0000000000000000::0000000000000000:8CA64DE9C1B123A7
+Index: openssl-1.0.1e/crypto/sm4/sm4_soft.c
+===================================================================
+--- openssl-1.0.1e/crypto/sm4/sm4_soft.c	(revision 23118)
++++ openssl-1.0.1e/crypto/sm4/sm4_soft.c	(working copy)
+@@ -32,7 +32,7 @@
+ #define  SHL(x,n) (((x) & 0xFFFFFFFF) << n)
+ #define ROTL(x,n) (SHL((x),n) | ((x) >> (32 - n)))
+ 
+-#define SWAP(a,b) { unsigned long t = a; a = b; b = t; t = 0; }
++#define SWAP(a,b) { unsigned int t = a; a = b; b = t; t = 0; }
+ 
+ /*
+  * Expanded SM4 S-boxes
+@@ -59,10 +59,10 @@
+ };
+ 
+ /* System parameter */
+-static const unsigned long FK[4] = {0xa3b1bac6,0x56aa3350,0x677d9197,0xb27022dc};
++static const unsigned int FK[4] = {0xa3b1bac6,0x56aa3350,0x677d9197,0xb27022dc};
+ 
+ /* fixed parameter */
+-static const unsigned long CK[32] =
++static const unsigned int CK[32] =
+ {
+ 0x00070e15,0x1c232a31,0x383f464d,0x545b6269,
+ 0x70777e85,0x8c939aa1,0xa8afb6bd,0xc4cbd2d9,
+@@ -93,10 +93,10 @@
+  * args:    [in] a: a is a 32 bits unsigned value;
+  * return: c: c is calculated with line algorithm "L" and nonline algorithm "t"
+  */
+-static unsigned long sm4Lt(unsigned long ka)
++static unsigned int sm4Lt(unsigned int ka)
+ {
+-    unsigned long bb = 0;
+-    unsigned long c = 0;
++    unsigned int bb = 0;
++    unsigned int c = 0;
+     unsigned char a[4];
+ 	unsigned char b[4];
+     PUT_ULONG_BE(ka,a,0)
+@@ -119,7 +119,7 @@
+  * args:    [in] rk: encryption/decryption key;
+  * return the contents of encryption/decryption contents.
+  */
+-static unsigned long sm4F(unsigned long x0, unsigned long x1, unsigned long x2, unsigned long x3, unsigned long rk)
++static unsigned int sm4F(unsigned int x0, unsigned int x1, unsigned int x2, unsigned int x3, unsigned int rk)
+ {
+     return (x0^sm4Lt(x1^x2^x3^rk));
+ }
+@@ -130,10 +130,10 @@
+  * args:    [in] a: a is a 32 bits unsigned value;
+  * return: sk[i]: i{0,1,2,3,...31}.
+  */
+-static unsigned long sm4CalciRK(unsigned long ka)
++static unsigned int sm4CalciRK(unsigned int ka)
+ {
+-    unsigned long bb = 0;
+-    unsigned long rk = 0;
++    unsigned int bb = 0;
++    unsigned int rk = 0;
+     unsigned char a[4];
+     unsigned char b[4];
+     PUT_ULONG_BE(ka,a,0)
+@@ -146,11 +146,11 @@
+     return rk;
+ }
+ 
+-static void sm4_setkey( unsigned long SK[32], const unsigned char key[16] )
++static void sm4_setkey( unsigned int SK[32], const unsigned char key[16] )
+ {
+-    unsigned long MK[4];
+-    unsigned long k[36];
+-    unsigned long i = 0;
++    unsigned int MK[4];
++    unsigned int k[36];
++    unsigned int i = 0;
+ 
+     GET_ULONG_BE( MK[0], key, 0 );
+     GET_ULONG_BE( MK[1], key, 4 );
+@@ -172,12 +172,12 @@
+  * SM4 standard one round processing
+  *
+  */
+-static void sm4_one_round( unsigned long sk[32],
++static void sm4_one_round( unsigned int sk[32],
+                     const unsigned char input[16],
+                     unsigned char output[16] )
+ {
+-    unsigned long i = 0;
+-    unsigned long ulbuf[36];
++    unsigned int i = 0;
++    unsigned int ulbuf[36];
+ 
+     memset(ulbuf, 0, sizeof(ulbuf));
+     GET_ULONG_BE( ulbuf[0], input, 0 )
+Index: openssl-1.0.1e/crypto/sm4/sm4_soft.h
+===================================================================
+--- openssl-1.0.1e/crypto/sm4/sm4_soft.h	(revision 23118)
++++ openssl-1.0.1e/crypto/sm4/sm4_soft.h	(working copy)
+@@ -9,7 +9,7 @@
+ typedef struct
+ {
+     int mode;                   /*!<  encrypt/decrypt   */
+-    unsigned long sk[32];       /*!<  SM4 subkeys       */
++    unsigned int sk[32];       /*!<  SM4 subkeys       */
+ }
+ sm4_context;
+ 
+Index: openssl-1.0.1e/crypto/sm4/sm4.h
+===================================================================
+--- openssl-1.0.1e/crypto/sm4/sm4.h	(revision 23118)
++++ openssl-1.0.1e/crypto/sm4/sm4.h	(working copy)
+@@ -29,7 +29,7 @@
+ 	/* This should be a hidden type, but EVP requires that the size be known */
+ 	
+ 	struct sm4_key_st {
+-		unsigned char key_data[4*SM4_KEY_SIZE];
++		unsigned char key_data[16*SM4_KEY_SIZE];
+ 	};
+ 	typedef struct sm4_key_st SM4_KEY;
+ 

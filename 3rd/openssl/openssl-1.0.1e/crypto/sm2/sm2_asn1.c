@@ -1,0 +1,14 @@
+/* crypto/sm2/sm2_asn1.c */
+
+#include "sm2_locl.h"
+#include <openssl/err.h>
+#include <openssl/asn1t.h>
+
+ASN1_SEQUENCE(SM2_SIG) = {
+	ASN1_SIMPLE(SM2_SIG, r, CBIGNUM),
+	ASN1_SIMPLE(SM2_SIG, s, CBIGNUM)
+} ASN1_SEQUENCE_END(SM2_SIG)
+
+DECLARE_ASN1_FUNCTIONS_const(SM2_SIG)
+DECLARE_ASN1_ENCODE_FUNCTIONS_const(SM2_SIG, SM2_SIG)
+IMPLEMENT_ASN1_FUNCTIONS_const(SM2_SIG)

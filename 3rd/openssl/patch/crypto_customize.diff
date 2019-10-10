@@ -1,0 +1,35 @@
+Index: crypto/mem.c
+===================================================================
+--- crypto/mem.c	(revision 8732)
++++ crypto/mem.c	(working copy)
+@@ -121,6 +121,16 @@
+ static long (*get_debug_options_func)(void) = NULL;
+ #endif
+ 
++void CRYPTO_set_customize(int new)
++{
++	allow_customize = new;
++}
++
++int CRYPTO_get_customize(void)
++{
++	return allow_customize;
++}
++
+ int CRYPTO_set_mem_functions(void *(*m)(size_t), void *(*r)(void *, size_t),
+ 	void (*f)(void *))
+ 	{
+Index: crypto/crypto.h
+===================================================================
+--- crypto/crypto.h	(revision 8732)
++++ crypto/crypto.h	(working copy)
+@@ -336,6 +336,9 @@
+ #define CRYPTO_malloc_init()	CRYPTO_set_mem_functions(\
+ 	malloc, realloc, free)
+ 
++void CRYPTO_set_customize(int new);
++int CRYPTO_get_customize(void);
++
+ #if defined CRYPTO_MDEBUG_ALL || defined CRYPTO_MDEBUG_TIME || defined CRYPTO_MDEBUG_THREAD
+ # ifndef CRYPTO_MDEBUG /* avoid duplicate #define */
+ #  define CRYPTO_MDEBUG

@@ -1,0 +1,61 @@
+# mk.inf
+
+OPENSSLDIR = compile
+PLUGINSDIR = plugins
+
+#CCMODE = PROGRAM
+SRCS = openssl-1.0.1e
+PLUGINS_SRCS = plugins
+SSLVER=1.0.0
+
+all::
+	cd $(OPENSSLDIR); \
+	make && cd ..;\
+	cp $(OPENSSLDIR)/libsg_crypto.a $(TOPDIR)/libs/
+	cp $(OPENSSLDIR)/libsg_ssl.a $(TOPDIR)/libs/
+	cp $(OPENSSLDIR)/libsg_crypto.so.$(SSLVER) $(TOPDIR)/libs/
+	cp $(OPENSSLDIR)/libsg_ssl.so.$(SSLVER) $(TOPDIR)/libs/
+	ln -sf libsg_crypto.so.$(SSLVER) $(TOPDIR)/libs/libsg_crypto.so
+	ln -sf libsg_ssl.so.$(SSLVER) $(TOPDIR)/libs/libsg_ssl.so
+	
+prepare::
+	@if [ -d $(OPENSSLDIR) ]; then \
+		rm -rf $(OPENSSLDIR); \
+	fi; \
+	cp $(SRCDIR)/$(THEDIR)/$(SRCS) -rf $(OPENSSLDIR); \
+	if [ "$(ARCH)"x = "aarch64"x ]; then \
+		cp $(OPENSSLDIR)/Makefile.arm64 $(OPENSSLDIR)/Makefile; \
+	else \
+		cp $(OPENSSLDIR)/Makefile.compile $(OPENSSLDIR)/Makefile; \
+	fi; \
+	ln -sf $(TOPDIR)/config.status $(OPENSSLDIR)/config.jos; \
+
+	@if [ ! -d $(TOPDIR)/include/openssl ]; then \
+		ln -sf $(TOPDIR)/$(THEDIR)/$(OPENSSLDIR)/include/openssl $(TOPDIR)/include/openssl; \
+	fi; \
+
+	@if [ -d $(PLUGINSDIR) ]; then \
+		rm -rf $(PLUGINSDIR); \
+	fi; \
+	cp $(SRCDIR)/$(THEDIR)/$(PLUGINSDIR) -rf $(PLUGINSDIR); \
+
+
+clean::
+	@cd $(OPENSSLDIR); \
+	make clean; \
+	cd ..
+
+install::
+	mkdir -p $(DSTDIR)/lib/	
+	mkdir -p $(DSTDIR)/app/openssl/bin	
+	cp -f $(OPENSSLDIR)/libsg_crypto.so.$(SSLVER) $(DSTDIR)/lib/
+	cp -f $(OPENSSLDIR)/libsg_ssl.so.$(SSLVER) $(DSTDIR)/lib/
+	cp -f $(OPENSSLDIR)/apps/openssl $(DSTDIR)/app/openssl/bin
+	chmod 644 $(DSTDIR)/lib/libsg_crypto.so.$(SSLVER)
+	chmod 644 $(DSTDIR)/lib/libsg_ssl.so.$(SSLVER)
+	ln -sf $(DSTDIR)/lib/libsg_crypto.so.$(SSLVER) $(DSTDIR)/lib/libsg_crypto.so
+	ln -sf $(DSTDIR)/lib/libsg_ssl.so.$(SSLVER) $(DSTDIR)/lib/libsg_ssl.so
+	mkdir -p $(DSTDIR)/app/openssl/plugins/fmcard	
+	cp -arf $(PLUGINSDIR)/fmcard/FM_CPC_DRV.ko $(DSTDIR)/app/openssl/plugins/fmcard
+	cp -arf $(PLUGINSDIR)/fmcard/fmcard_install.sh $(DSTDIR)/app/openssl/plugins/fmcard
+	cp -arf $(PLUGINSDIR)/fmcard/libfmapiv100.so $(DSTDIR)/app/openssl/plugins/fmcard

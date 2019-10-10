@@ -1,0 +1,12 @@
+Patch add order:
+openssl_compile.patch
+crypto_customize.diff
+evp_sm1.patch
+evp_sm1_20130418.patch
+evp_sm1_20130910.patch
+openssl_compile_20130619.patch
+evp_sm3_20140102.patch
+evp_sm3_objects_20140104.diff
+openssl_heartbeat.patch
+CVE-2014-0224.patch
+evp_sm4.patch

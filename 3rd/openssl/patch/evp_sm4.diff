@@ -1,0 +1,978 @@
+Index: apps/speed.c
+===================================================================
+--- apps/speed.c	(revision 22722)
++++ apps/speed.c	(working copy)
+@@ -195,6 +195,9 @@
+ #ifndef OPENSSL_NO_SM1
+ #include <openssl/sm1.h>
+ #endif
++#ifndef OPENSSL_NO_SM4
++#include <openssl/sm4.h>
++#endif
+ #include <openssl/modes.h>
+ 
+ #ifdef OPENSSL_FIPS
+@@ -245,7 +248,7 @@
+ static int do_multi(int multi);
+ #endif
+ 
+-#define ALGOR_NUM	32
++#define ALGOR_NUM	33
+ #define SIZE_NUM	5
+ #define RSA_NUM		4
+ #define DSA_NUM		3
+@@ -261,7 +264,7 @@
+   "camellia-128 cbc","camellia-192 cbc","camellia-256 cbc",
+   "evp","sha256","sha512","whirlpool",
+   "aes-128 ige","aes-192 ige","aes-256 ige","ghash","sm1-128 cbc",
+-  "sm3"};
++  "sm3","sm4-128 cbc"};
+ static double results[ALGOR_NUM][SIZE_NUM];
+ static int lengths[SIZE_NUM]={16,64,256,1024,8*1024};
+ #ifndef OPENSSL_NO_RSA
+@@ -435,6 +438,9 @@
+ #ifndef OPENSSL_NO_SM1
+        SM1_KEY sm1_ks;
+ #endif
++#ifndef OPENSSL_NO_SM4
++       SM4_KEY sm4_ks;
++#endif
+ 	static const unsigned char key16[16]=
+ 		{0x12,0x34,0x56,0x78,0x9a,0xbc,0xde,0xf0,
+ 		 0x34,0x56,0x78,0x9a,0xbc,0xde,0xf0,0x12};
+@@ -513,6 +519,7 @@
+ #define D_GHASH		29
+ #define D_CBC_128_SM1  30
+ #define D_SM3		31
++#define D_CBC_128_SM4  32
+ 
+ 	double d=0.0;
+ 	long c[ALGOR_NUM][SIZE_NUM];
+@@ -1033,6 +1040,10 @@
+ 			if (strcmp(*argv,"sm3") == 0) doit[D_SM3]=1;
+ 		else
+ #endif 
++#ifndef OPENSSL_NO_SM4
++			if (strcmp(*argv,"sm4-128-cbc") == 0) doit[D_CBC_128_SM4]=1;
++		else
++#endif 
+ 			{
+ 			BIO_printf(bio_err,"Error: bad option or value\n");
+ 			BIO_printf(bio_err,"\n");
+@@ -1103,6 +1114,10 @@
+ 			BIO_printf(bio_err,"sm1-128-cbc   ");
+ 			BIO_printf(bio_err,"\n");
+ #endif
++#ifndef OPENSSL_NO_sm4
++			BIO_printf(bio_err,"sm4-128-cbc   ");
++			BIO_printf(bio_err,"\n");
++#endif
+ #ifndef OPENSSL_NO_AES
+ 			BIO_printf(bio_err,"aes-128-cbc aes-192-cbc aes-256-cbc ");
+ 			BIO_printf(bio_err,"aes-128-ige aes-192-ige aes-256-ige ");
+@@ -1292,6 +1307,9 @@
+ #ifndef OPENSSL_NO_SM1
+        SM1_set_encrypt_key(key16,128,&sm1_ks);
+ #endif
++#ifndef OPENSSL_NO_SM4
++       SM4_set_encrypt_key(key16,128,&sm4_ks);
++#endif
+ #ifndef SIGALRM
+ #ifndef OPENSSL_NO_DES
+ 	BIO_printf(bio_err,"First we calculate the approximate speed ...\n");
+@@ -1337,6 +1355,7 @@
+ 	c[D_IGE_256_AES][0]=count;
+ 	c[D_GHASH][0]=count;
+ 	c[D_CBC_128_SM1][0]=count;
++	c[D_CBC_128_SM4][0]=count;
+ 
+ 	for (i=1; i<SIZE_NUM; i++)
+ 		{
+@@ -1773,6 +1792,22 @@
+                        }
+                }
+ #endif
++#ifndef OPENSSL_NO_SM4
++       if (doit[D_CBC_128_SM4])
++               {
++               for (j=0; j<SIZE_NUM; j++)
++                       {
++                       print_message(names[D_CBC_128_SM4],c[D_CBC_128_SM4][j],lengths[j]);
++                       Time_F(START);
++                       for (count=0,run=1; COND(c[D_CBC_128_SM4][j]); count++)
++                               SM4_cbc_encrypt(buf,buf,
++                                       (unsigned long)lengths[j],&sm4_ks,
++                                       iv,SM4_ENCRYPT);
++                       d=Time_F(STOP);
++                       print_result(D_CBC_128_SM4,j,count,d);
++                       }
++               }
++#endif
+ #ifndef OPENSSL_NO_AES
+ 	if (doit[D_CBC_128_AES])
+ 		{
+Index: Makefile.compile
+===================================================================
+--- Makefile.compile	(revision 22722)
++++ Makefile.compile	(working copy)
+@@ -155,7 +155,7 @@
+ 	bn ec rsa dsa ecdsa dh ecdh dso engine \
+ 	buffer bio stack lhash rand err \
+ 	evp asn1 pem x509 x509v3 conf txt_db pkcs7 pkcs12 comp ocsp ui krb5 \
+-	cms pqueue ts srp cmac sm1 sm3
++	cms pqueue ts srp cmac sm1 sm3 sm4
+ # keep in mind that the above list is adjusted by ./Configure
+ # according to no-xxx arguments...
+ 
+Index: crypto/objects/obj_mac.h
+===================================================================
+--- crypto/objects/obj_mac.h	(revision 22728)
++++ crypto/objects/obj_mac.h	(working copy)
+@@ -2601,6 +2601,11 @@
+ #define NID_sm1_128_cbc		922
+ #define OBJ_sm1_128_cbc		OBJ_gm_alg,102L
+ 
++#define SN_sm4_128_cbc		"SM4-128-CBC"
++#define LN_sm4_128_cbc		"sm4-128-cbc"
++#define NID_sm4_128_cbc		925
++#define OBJ_sm4_128_cbc		OBJ_gm_alg,104L
++
+ #define SN_sm3		"SM3"
+ #define LN_sm3		"sm3"
+ #define NID_sm3		923
+Index: crypto/objects/obj_dat.h
+===================================================================
+--- crypto/objects/obj_dat.h	(revision 22728)
++++ crypto/objects/obj_dat.h	(working copy)
+@@ -62,12 +62,12 @@
+  * [including the GNU Public Licence.]
+  */
+ 
+-#define NUM_NID 925
+-#define NUM_SN 918
+-#define NUM_LN 918
+-#define NUM_OBJ 862
++#define NUM_NID 926
++#define NUM_SN 919
++#define NUM_LN 919
++#define NUM_OBJ 863
+ 
+-static const unsigned char lvalues[6011]={
++static const unsigned char lvalues[6018]={
+ 0x00,                                        /* [  0] OBJ_undef */
+ 0x2A,0x86,0x48,0x86,0xF7,0x0D,               /* [  1] OBJ_rsadsi */
+ 0x2A,0x86,0x48,0x86,0xF7,0x0D,0x01,          /* [  7] OBJ_pkcs */
+@@ -930,6 +930,7 @@
+ 0x2A,0x81,0x1C,0x81,0x45,0x01,0x66,          /* [5987] OBJ_sm1_128_cbc */
+ 0x2A,0x81,0x1C,0x81,0x45,0x01,0x83,0x11,     /* [5994] OBJ_sm3 */
+ 0x2A,0x81,0x1C,0x81,0x45,0x01,0x83,0x78,     /* [6002] OBJ_sm3WithRSAEncryption */
++0x2A,0x81,0x1C,0x81,0x45,0x01,0x68,          /* [6010] OBJ_sm4_128_cbc */
+ };
+ 
+ static const ASN1_OBJECT nid_objs[NUM_NID]={
+@@ -2417,6 +2418,7 @@
+ {"SM3","sm3",NID_sm3,8,&(lvalues[5994]),0},
+ {"RSA-SM3","sm3WithRSAEncryption",NID_sm3WithRSAEncryption,8,
+ 	&(lvalues[6002]),0},
++{"SM4-128-CBC","sm4-128-cbc",NID_sm4_128_cbc,7,&(lvalues[6010]),0},
+ };
+ 
+ static const unsigned int sn_objs[NUM_SN]={
+@@ -2601,6 +2603,7 @@
+ 674,	/* "SHA512" */
+ 922,	/* "SM1-128-CBC" */
+ 923,	/* "SM3" */
++925,	/* "SM4-128-CBC" */
+ 188,	/* "SMIME" */
+ 167,	/* "SMIME-CAPS" */
+ 100,	/* "SN" */
+@@ -4216,6 +4219,7 @@
+ 922,	/* "sm1-128-cbc" */
+ 923,	/* "sm3" */
+ 924,	/* "sm3WithRSAEncryption" */
++925,	/* "sm4-128-cbc" */
+ 16,	/* "stateOrProvinceName" */
+ 660,	/* "streetAddress" */
+ 498,	/* "subtreeMaximumQuality" */
+@@ -4597,6 +4601,7 @@
+ 635,	/* OBJ_setAttr_SecDevSig            2 23 42 3 3 5 2 */
+ 436,	/* OBJ_ucl                          0 9 2342 19200300 */
+ 922,	/* OBJ_sm1_128_cbc                  1 2 156 197 1 102 */
++925,	/* OBJ_sm4_128_cbc                  1 2 156 197 1 104 */
+ 820,	/* OBJ_id_Gost28147_89_None_KeyMeshing 1 2 643 2 2 14 0 */
+ 819,	/* OBJ_id_Gost28147_89_CryptoPro_KeyMeshing 1 2 643 2 2 14 1 */
+ 845,	/* OBJ_id_GostR3410_94_a            1 2 643 2 2 20 1 */
+Index: crypto/objects/obj_mac.num
+===================================================================
+--- crypto/objects/obj_mac.num	(revision 22728)
++++ crypto/objects/obj_mac.num	(working copy)
+@@ -922,3 +922,4 @@
+ sm1_128_cbc		922
+ sm3		923
+ sm3WithRSAEncryption		924
++sm4_128_cbc		925
+Index: crypto/objects/objects.txt
+===================================================================
+--- crypto/objects/objects.txt	(revision 22728)
++++ crypto/objects/objects.txt	(working copy)
+@@ -851,6 +851,7 @@
+ # GMJ Algorithms
+ !Alias gm-alg	CN-GMJ 1
+ gm-alg 102	: SM1-128-CBC	: sm1-128-cbc
++gm-alg 104	: SM4-128-CBC	: sm4-128-cbc
+ gm-alg 401	: SM3	: sm3
+ gm-alg 504	: RSA-SM3	: sm3WithRSAEncryption
+ 
+Index: crypto/evp/Makefile
+===================================================================
+--- crypto/evp/Makefile	(revision 22722)
++++ crypto/evp/Makefile	(working copy)
+@@ -29,7 +29,7 @@
+ 	c_all.c c_allc.c c_alld.c evp_lib.c bio_ok.c \
+ 	evp_pkey.c evp_pbe.c p5_crpt.c p5_crpt2.c \
+ 	e_old.c pmeth_lib.c pmeth_fn.c pmeth_gn.c m_sigver.c evp_fips.c	\
+-	e_aes_cbc_hmac_sha1.c e_rc4_hmac_md5.c e_sm1.c m_sm3.c
++	e_aes_cbc_hmac_sha1.c e_rc4_hmac_md5.c e_sm1.c m_sm3.c e_sm4.c
+ 
+ LIBOBJ=	encode.o digest.o evp_enc.o evp_key.o evp_acnf.o evp_cnf.o \
+ 	e_des.o e_bf.o e_idea.o e_des3.o e_camellia.o\
+@@ -42,7 +42,7 @@
+ 	c_all.o c_allc.o c_alld.o evp_lib.o bio_ok.o \
+ 	evp_pkey.o evp_pbe.o p5_crpt.o p5_crpt2.o \
+ 	e_old.o pmeth_lib.o pmeth_fn.o pmeth_gn.o m_sigver.o evp_fips.o \
+-	e_aes_cbc_hmac_sha1.o e_rc4_hmac_md5.o e_sm1.o m_sm3.o
++	e_aes_cbc_hmac_sha1.o e_rc4_hmac_md5.o e_sm1.o m_sm3.o e_sm4.o
+ 
+ SRC= $(LIBSRC)
+ 
+@@ -797,3 +797,13 @@
+ m_sm3.o: ../../include/openssl/sha.h ../../include/openssl/stack.h
+ m_sm3.o: ../../include/openssl/symhacks.h ../../include/openssl/x509.h
+ m_sm3.o: ../../include/openssl/x509_vfy.h ../cryptlib.h evp_locl.h m_sm3.c
++e_sm4.o: ../../include/openssl/sm4.h ../../include/openssl/asn1.h
++e_sm4.o: ../../include/openssl/bio.h ../../include/openssl/crypto.h
++e_sm4.o: ../../include/openssl/e_os2.h ../../include/openssl/err.h
++e_sm4.o: ../../include/openssl/evp.h ../../include/openssl/lhash.h
++e_sm4.o: ../../include/openssl/modes.h ../../include/openssl/obj_mac.h
++e_sm4.o: ../../include/openssl/objects.h ../../include/openssl/opensslconf.h
++e_sm4.o: ../../include/openssl/opensslv.h ../../include/openssl/ossl_typ.h
++e_sm4.o: ../../include/openssl/rand.h ../../include/openssl/safestack.h
++e_sm4.o: ../../include/openssl/stack.h ../../include/openssl/symhacks.h
++e_sm4.o: ../modes/modes_lcl.h e_sm4.c evp_locl.h
+Index: crypto/evp/e_sm4.c
+===================================================================
+--- crypto/evp/e_sm4.c	(revision 0)
++++ crypto/evp/e_sm4.c	(revision 0)
+@@ -0,0 +1,51 @@
++/* crypto/evp/e_sm4.c */
++/* add by fanjc
++ */
++
++#include <stdio.h>
++#include "cryptlib.h"
++#ifndef OPENSSL_NO_SM1
++#include <openssl/evp.h>
++#include <openssl/objects.h>
++#include "evp_locl.h"
++#include <openssl/sm4.h>
++
++static int sm4_init_key(EVP_CIPHER_CTX *ctx, const unsigned char *key,
++			const unsigned char *iv, int enc);
++static int sm4_ctrl(EVP_CIPHER_CTX *c, int type, int arg, void *ptr);
++
++static int sm4_128_cbc_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out,
++			  const unsigned char *in, size_t inl)
++{
++	SM4_cbc_encrypt(in, out, inl, ctx->cipher_data, ctx->iv, ctx->encrypt);
++	return 1;
++}
++
++BLOCK_CIPHER_def_cbc(sm4_128,SM4_KEY,NID_sm4_128,SM4_BLOCK_SIZE,SM4_KEY_SIZE,SM4_IV_SIZE,
++		     0, sm4_init_key,NULL,
++		     NULL,
++		     NULL,sm4_ctrl)
++
++static int sm4_init_key(EVP_CIPHER_CTX *ctx, const unsigned char *key,
++			const unsigned char *iv, int enc)
++	{
++	int ret;
++	if (enc) {
++		ret=SM4_set_encrypt_key(key, ctx->key_len * 8, ctx->cipher_data); 
++	} else {
++		ret=SM4_set_decrypt_key(key, ctx->key_len * 8, ctx->cipher_data); 
++	}
++	memcpy(ctx->iv, iv, SM4_IV_SIZE);
++	if(ret != 0)
++		{
++		return 0;
++		}
++	return 1;
++	}
++
++static int sm4_ctrl(EVP_CIPHER_CTX *c, int type, int arg, void *ptr)
++	{
++	return 1;
++	}
++
++#endif
+
+Property changes on: crypto/evp/e_sm4.c
+___________________________________________________________________
+Added: svn:executable
+   + *
+
+Index: crypto/evp/evp.h
+===================================================================
+--- crypto/evp/evp.h	(revision 22722)
++++ crypto/evp/evp.h	(working copy)
+@@ -857,6 +857,10 @@
+ const EVP_MD *EVP_sm3(void);
+ #endif
+ 
++#ifndef OPENSSL_NO_SM4
++const EVP_CIPHER *EVP_sm4_128_cbc(void);
++#endif
++
+ void OPENSSL_add_all_algorithms_noconf(void);
+ void OPENSSL_add_all_algorithms_conf(void);
+ 
+Index: crypto/evp/e_sm1.c
+===================================================================
+--- crypto/evp/e_sm1.c	(revision 22722)
++++ crypto/evp/e_sm1.c	(working copy)
+@@ -39,7 +39,7 @@
+ 	NULL
+ };
+ */
+-BLOCK_CIPHER_def_cbc(sm1_128,SM1_KEY,NID_sm1_128,16,16,16,
++BLOCK_CIPHER_def_cbc(sm1_128,SM1_KEY,NID_sm1_128,SM1_BLOCK_SIZE,SM1_KEY_SIZE,SM1_IV_SIZE,
+ 		     0, sm1_init_key,NULL,
+ 		     NULL,
+ 		     NULL,sm1_ctrl)
+Index: crypto/evp/c_allc.c
+===================================================================
+--- crypto/evp/c_allc.c	(revision 22722)
++++ crypto/evp/c_allc.c	(working copy)
+@@ -231,4 +231,8 @@
+ #ifndef OPENSSL_NO_SM1
+  	EVP_add_cipher(EVP_sm1_128_cbc());
+ #endif
++
++#ifndef OPENSSL_NO_SM4
++ 	EVP_add_cipher(EVP_sm4_128_cbc());
++#endif
+ 	}
+Index: crypto/e_sm1.c
+===================================================================
+Index: crypto/sm1/sm1.h
+===================================================================
+--- crypto/sm1/sm1.h	(revision 22722)
++++ crypto/sm1/sm1.h	(working copy)
+@@ -19,7 +19,8 @@
+ #define SM1_DECRYPT		0
+ 
+ #define SM1_BLOCK_SIZE	16
+-#define SM1_IV_SIZE		16
++#define SM1_KEY_SIZE	16
++#define SM1_IV_SIZE		SM1_BLOCK_SIZE
+ 
+ enum{
+ 	vendor_fm=1,
+Index: crypto/sm4/sm4_soft.c
+===================================================================
+--- crypto/sm4/sm4_soft.c	(revision 0)
++++ crypto/sm4/sm4_soft.c	(revision 0)
+@@ -0,0 +1,290 @@
++#include <string.h>
++#include <stdio.h>
++#include "sm4_soft.h"
++
++/*
++ * 32-bit integer manipulation macros (big endian)
++ */
++#ifndef GET_ULONG_BE
++#define GET_ULONG_BE(n,b,i)                             \
++{                                                       \
++    (n) = ( (unsigned int) (b)[(i)    ] << 24 )        \
++        | ( (unsigned int) (b)[(i) + 1] << 16 )        \
++        | ( (unsigned int) (b)[(i) + 2] <<  8 )        \
++        | ( (unsigned int) (b)[(i) + 3]       );       \
++}
++#endif
++
++#ifndef PUT_ULONG_BE
++#define PUT_ULONG_BE(n,b,i)                             \
++{                                                       \
++    (b)[(i)    ] = (unsigned char) ( (n) >> 24 );       \
++    (b)[(i) + 1] = (unsigned char) ( (n) >> 16 );       \
++    (b)[(i) + 2] = (unsigned char) ( (n) >>  8 );       \
++    (b)[(i) + 3] = (unsigned char) ( (n)       );       \
++}
++#endif
++
++/*
++ *rotate shift left marco definition
++ *
++ */
++#define  SHL(x,n) (((x) & 0xFFFFFFFF) << n)
++#define ROTL(x,n) (SHL((x),n) | ((x) >> (32 - n)))
++
++#define SWAP(a,b) { unsigned long t = a; a = b; b = t; t = 0; }
++
++/*
++ * Expanded SM4 S-boxes
++ * Sbox table: 8bits input convert to 8 bits output*/
++ 
++static const unsigned char SboxTable[16][16] = 
++{
++{0xd6,0x90,0xe9,0xfe,0xcc,0xe1,0x3d,0xb7,0x16,0xb6,0x14,0xc2,0x28,0xfb,0x2c,0x05},
++{0x2b,0x67,0x9a,0x76,0x2a,0xbe,0x04,0xc3,0xaa,0x44,0x13,0x26,0x49,0x86,0x06,0x99},
++{0x9c,0x42,0x50,0xf4,0x91,0xef,0x98,0x7a,0x33,0x54,0x0b,0x43,0xed,0xcf,0xac,0x62},
++{0xe4,0xb3,0x1c,0xa9,0xc9,0x08,0xe8,0x95,0x80,0xdf,0x94,0xfa,0x75,0x8f,0x3f,0xa6},
++{0x47,0x07,0xa7,0xfc,0xf3,0x73,0x17,0xba,0x83,0x59,0x3c,0x19,0xe6,0x85,0x4f,0xa8},
++{0x68,0x6b,0x81,0xb2,0x71,0x64,0xda,0x8b,0xf8,0xeb,0x0f,0x4b,0x70,0x56,0x9d,0x35},
++{0x1e,0x24,0x0e,0x5e,0x63,0x58,0xd1,0xa2,0x25,0x22,0x7c,0x3b,0x01,0x21,0x78,0x87},
++{0xd4,0x00,0x46,0x57,0x9f,0xd3,0x27,0x52,0x4c,0x36,0x02,0xe7,0xa0,0xc4,0xc8,0x9e},
++{0xea,0xbf,0x8a,0xd2,0x40,0xc7,0x38,0xb5,0xa3,0xf7,0xf2,0xce,0xf9,0x61,0x15,0xa1},
++{0xe0,0xae,0x5d,0xa4,0x9b,0x34,0x1a,0x55,0xad,0x93,0x32,0x30,0xf5,0x8c,0xb1,0xe3},
++{0x1d,0xf6,0xe2,0x2e,0x82,0x66,0xca,0x60,0xc0,0x29,0x23,0xab,0x0d,0x53,0x4e,0x6f},
++{0xd5,0xdb,0x37,0x45,0xde,0xfd,0x8e,0x2f,0x03,0xff,0x6a,0x72,0x6d,0x6c,0x5b,0x51},
++{0x8d,0x1b,0xaf,0x92,0xbb,0xdd,0xbc,0x7f,0x11,0xd9,0x5c,0x41,0x1f,0x10,0x5a,0xd8},
++{0x0a,0xc1,0x31,0x88,0xa5,0xcd,0x7b,0xbd,0x2d,0x74,0xd0,0x12,0xb8,0xe5,0xb4,0xb0},
++{0x89,0x69,0x97,0x4a,0x0c,0x96,0x77,0x7e,0x65,0xb9,0xf1,0x09,0xc5,0x6e,0xc6,0x84},
++{0x18,0xf0,0x7d,0xec,0x3a,0xdc,0x4d,0x20,0x79,0xee,0x5f,0x3e,0xd7,0xcb,0x39,0x48}
++};
++
++/* System parameter */
++static const unsigned long FK[4] = {0xa3b1bac6,0x56aa3350,0x677d9197,0xb27022dc};
++
++/* fixed parameter */
++static const unsigned long CK[32] =
++{
++0x00070e15,0x1c232a31,0x383f464d,0x545b6269,
++0x70777e85,0x8c939aa1,0xa8afb6bd,0xc4cbd2d9,
++0xe0e7eef5,0xfc030a11,0x181f262d,0x343b4249,
++0x50575e65,0x6c737a81,0x888f969d,0xa4abb2b9,
++0xc0c7ced5,0xdce3eaf1,0xf8ff060d,0x141b2229,
++0x30373e45,0x4c535a61,0x686f767d,0x848b9299,
++0xa0a7aeb5,0xbcc3cad1,0xd8dfe6ed,0xf4fb0209,
++0x10171e25,0x2c333a41,0x484f565d,0x646b7279
++};
++
++
++/*
++ * private function:
++ * look up in SboxTable and get the related value.
++ * args:    [in] inch: 0x00~0xFF (8 bits unsigned value).
++ */
++static unsigned char sm4Sbox(unsigned char inch)
++{
++    unsigned char *pTable = (unsigned char *)SboxTable;
++    unsigned char retVal = (unsigned char)(pTable[inch]);
++    return retVal;
++}
++
++/*
++ * private F(Lt) function:
++ * "T algorithm" == "L algorithm" + "t algorithm".
++ * args:    [in] a: a is a 32 bits unsigned value;
++ * return: c: c is calculated with line algorithm "L" and nonline algorithm "t"
++ */
++static unsigned long sm4Lt(unsigned long ka)
++{
++    unsigned long bb = 0;
++    unsigned long c = 0;
++    unsigned char a[4];
++	unsigned char b[4];
++    PUT_ULONG_BE(ka,a,0)
++    b[0] = sm4Sbox(a[0]);
++    b[1] = sm4Sbox(a[1]);
++    b[2] = sm4Sbox(a[2]);
++    b[3] = sm4Sbox(a[3]);
++	GET_ULONG_BE(bb,b,0)
++    c =bb^(ROTL(bb, 2))^(ROTL(bb, 10))^(ROTL(bb, 18))^(ROTL(bb, 24));
++    return c;
++}
++
++/*
++ * private F function:
++ * Calculating and getting encryption/decryption contents.
++ * args:    [in] x0: original contents;
++ * args:    [in] x1: original contents;
++ * args:    [in] x2: original contents;
++ * args:    [in] x3: original contents;
++ * args:    [in] rk: encryption/decryption key;
++ * return the contents of encryption/decryption contents.
++ */
++static unsigned long sm4F(unsigned long x0, unsigned long x1, unsigned long x2, unsigned long x3, unsigned long rk)
++{
++    return (x0^sm4Lt(x1^x2^x3^rk));
++}
++
++
++/* private function:
++ * Calculating round encryption key.
++ * args:    [in] a: a is a 32 bits unsigned value;
++ * return: sk[i]: i{0,1,2,3,...31}.
++ */
++static unsigned long sm4CalciRK(unsigned long ka)
++{
++    unsigned long bb = 0;
++    unsigned long rk = 0;
++    unsigned char a[4];
++    unsigned char b[4];
++    PUT_ULONG_BE(ka,a,0)
++    b[0] = sm4Sbox(a[0]);
++    b[1] = sm4Sbox(a[1]);
++    b[2] = sm4Sbox(a[2]);
++    b[3] = sm4Sbox(a[3]);
++	GET_ULONG_BE(bb,b,0)
++    rk = bb^(ROTL(bb, 13))^(ROTL(bb, 23));
++    return rk;
++}
++
++static void sm4_setkey( unsigned long SK[32], const unsigned char key[16] )
++{
++    unsigned long MK[4];
++    unsigned long k[36];
++    unsigned long i = 0;
++
++    GET_ULONG_BE( MK[0], key, 0 );
++    GET_ULONG_BE( MK[1], key, 4 );
++    GET_ULONG_BE( MK[2], key, 8 );
++    GET_ULONG_BE( MK[3], key, 12 );
++    k[0] = MK[0]^FK[0];
++    k[1] = MK[1]^FK[1];
++    k[2] = MK[2]^FK[2];
++    k[3] = MK[3]^FK[3];
++    for(; i<32; i++)
++    {
++        k[i+4] = k[i] ^ (sm4CalciRK(k[i+1]^k[i+2]^k[i+3]^CK[i]));
++        SK[i] = k[i+4];
++	}
++
++}
++
++/*
++ * SM4 standard one round processing
++ *
++ */
++static void sm4_one_round( unsigned long sk[32],
++                    const unsigned char input[16],
++                    unsigned char output[16] )
++{
++    unsigned long i = 0;
++    unsigned long ulbuf[36];
++
++    memset(ulbuf, 0, sizeof(ulbuf));
++    GET_ULONG_BE( ulbuf[0], input, 0 )
++    GET_ULONG_BE( ulbuf[1], input, 4 )
++    GET_ULONG_BE( ulbuf[2], input, 8 )
++    GET_ULONG_BE( ulbuf[3], input, 12 )
++    while(i<32)
++    {
++        ulbuf[i+4] = sm4F(ulbuf[i], ulbuf[i+1], ulbuf[i+2], ulbuf[i+3], sk[i]);
++// #ifdef _DEBUG
++//        	printf("rk(%02d) = 0x%08x,  X(%02d) = 0x%08x \n",i,sk[i], i, ulbuf[i+4] );
++// #endif
++	    i++;
++    }
++	PUT_ULONG_BE(ulbuf[35],output,0);
++	PUT_ULONG_BE(ulbuf[34],output,4);
++	PUT_ULONG_BE(ulbuf[33],output,8);
++	PUT_ULONG_BE(ulbuf[32],output,12);
++}
++
++/*
++ * SM4 key schedule (128-bit, encryption)
++ */
++void sm4_setkey_enc( sm4_context *ctx, const unsigned char key[16] )
++{
++    ctx->mode = SM4_ENCRYPT;
++	sm4_setkey( ctx->sk, key );
++}
++
++/*
++ * SM4 key schedule (128-bit, decryption)
++ */
++void sm4_setkey_dec( sm4_context *ctx, const unsigned char key[16] )
++{
++    int i;
++	ctx->mode = SM4_ENCRYPT;
++    sm4_setkey( ctx->sk, key );
++    for( i = 0; i < 16; i ++ )
++    {
++        SWAP( ctx->sk[ i ], ctx->sk[ 31-i] );
++    }
++}
++
++
++/*
++ * SM4-ECB block encryption/decryption
++ */
++
++void sm4_crypt_ecb( sm4_context *ctx,
++				   int mode,
++				   int length,
++				   const unsigned char *input,
++                   unsigned char *output)
++{
++    while( length > 0 )
++    {
++        sm4_one_round( ctx->sk, input, output );
++        input  += 16;
++        output += 16;
++        length -= 16;
++    }
++
++}
++
++/*
++ * SM4-CBC buffer encryption/decryption
++ */
++void sm4_crypt_cbc( sm4_context *ctx,
++                    int mode,
++                    int length,
++                    unsigned char iv[16],
++                    const unsigned char *input,
++                    unsigned char *output )
++{
++    int i;
++    unsigned char temp[16];
++
++    if( mode == SM4_ENCRYPT )
++    {
++        while( length > 0 )
++        {
++            for( i = 0; i < 16; i++ )
++                output[i] = (unsigned char)( input[i] ^ iv[i] );
++
++            sm4_one_round( ctx->sk, output, output );
++            memcpy( iv, output, 16 );
++
++            input  += 16;
++            output += 16;
++            length -= 16;
++        }
++    }
++    else /* SM4_DECRYPT */
++    {
++        while( length > 0 )
++        {
++            memcpy( temp, input, 16 );
++            sm4_one_round( ctx->sk, input, output );
++
++            for( i = 0; i < 16; i++ )
++                output[i] = (unsigned char)( output[i] ^ iv[i] );
++
++            memcpy( iv, temp, 16 );
++
++            input  += 16;
++            output += 16;
++            length -= 16;
++        }
++    }
++}
+Index: crypto/sm4/sm4_soft.h
+===================================================================
+--- crypto/sm4/sm4_soft.h	(revision 0)
++++ crypto/sm4/sm4_soft.h	(revision 0)
+@@ -0,0 +1,71 @@
++#ifndef SOFT_SM4_H
++#define SOFT_SM4_H
++
++#include "sm4.h"
++
++/**
++ * \brief          SM4 context structure
++ */
++typedef struct
++{
++    int mode;                   /*!<  encrypt/decrypt   */
++    unsigned long sk[32];       /*!<  SM4 subkeys       */
++}
++sm4_context;
++
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++/**
++ * \brief          SM4 key schedule (128-bit, encryption)
++ *
++ * \param ctx      SM4 context to be initialized
++ * \param key      16-byte secret key
++ */
++void sm4_setkey_enc( sm4_context *ctx, const unsigned char key[16] );
++
++/**
++ * \brief          SM4 key schedule (128-bit, decryption)
++ *
++ * \param ctx      SM4 context to be initialized
++ * \param key      16-byte secret key
++ */
++void sm4_setkey_dec( sm4_context *ctx, const unsigned char key[16] );
++
++/**
++ * \brief          SM4-ECB block encryption/decryption
++ * \param ctx      SM4 context
++ * \param mode     SM4_ENCRYPT or SM4_DECRYPT
++ * \param length   length of the input data
++ * \param input    input block
++ * \param output   output block
++ */
++void sm4_crypt_ecb( sm4_context *ctx,
++				     int mode,
++					 int length,
++                     const unsigned char *input,
++                     unsigned char *output);
++
++/**
++ * \brief          SM4-CBC buffer encryption/decryption
++ * \param ctx      SM4 context
++ * \param mode     SM4_ENCRYPT or SM4_DECRYPT
++ * \param length   length of the input data
++ * \param iv       initialization vector (updated after use)
++ * \param input    buffer holding the input data
++ * \param output   buffer holding the output data
++ */
++void sm4_crypt_cbc( sm4_context *ctx,
++                     int mode,
++                     int length,
++                     unsigned char iv[16],
++                     const unsigned char *input,
++                     unsigned char *output );
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif /* sm4.h */
+Index: crypto/sm4/sm4.h
+===================================================================
+--- crypto/sm4/sm4.h	(revision 0)
++++ crypto/sm4/sm4.h	(revision 0)
+@@ -0,0 +1,51 @@
++/* crypto/sm1/sm1.h -*- mode:C; c-file-style: "eay" -*- */
++/* ====================================================================
++ *  * add by fanjc
++ *   *
++ *    */
++
++#ifndef HEADER_SM4_H
++#define HEADER_SM4_H
++
++#include <openssl/opensslconf.h>
++
++#ifdef OPENSSL_NO_SM4
++#error SM4 is disabled.
++#endif
++
++#include <stddef.h>
++
++#define SM4_ENCRYPT		1
++#define SM4_DECRYPT		0
++
++#define SM4_BLOCK_SIZE	16
++#define SM4_KEY_SIZE	16
++#define SM4_IV_SIZE		SM4_BLOCK_SIZE
++
++#ifdef  __cplusplus
++extern "C" {
++#endif
++
++	/* This should be a hidden type, but EVP requires that the size be known */
++	
++	struct sm4_key_st {
++		unsigned char key_data[4*SM4_KEY_SIZE];
++	};
++	typedef struct sm4_key_st SM4_KEY;
++
++	
++	int SM4_set_encrypt_key(const unsigned char *userKey, const int bits,
++				SM4_KEY *key);
++	int SM4_set_decrypt_key(const unsigned char *userKey, const int bits,
++				SM4_KEY *key);
++
++	void SM4_cbc_encrypt(const unsigned char *in, unsigned char *out,
++			    size_t length, const SM4_KEY *key,
++				    unsigned char *ivec, const int enc);
++
++#ifdef  __cplusplus
++}
++#endif
++
++#endif /* !HEADER_SM1_H */
++
+
+Property changes on: crypto/sm4/sm4.h
+___________________________________________________________________
+Added: svn:executable
+   + *
+
+Index: crypto/sm4/sm4_core.c
+===================================================================
+--- crypto/sm4/sm4_core.c	(revision 0)
++++ crypto/sm4/sm4_core.c	(revision 0)
+@@ -0,0 +1,35 @@
++/* crypto/sm4/sm4_core.c */
++/* 
++ */
++
++#include <assert.h>
++
++#include <stdio.h>
++#include <string.h>
++#include <stdlib.h>
++#include <dlfcn.h>
++#include <openssl/sm4.h>
++#include <openssl/crypto.h>
++#include "sm4_soft.h"
++
++int SM4_set_encrypt_key(const unsigned char *userKey, const int bits,
++	SM4_KEY *key)
++{
++	sm4_setkey_enc((sm4_context *)key->key_data, userKey);
++	return 0;
++}
++
++int SM4_set_decrypt_key(const unsigned char *userKey, const int bits,
++	SM4_KEY *key)
++{
++	sm4_setkey_dec((sm4_context *)key->key_data, userKey);
++	return 0;
++}
++
++void SM4_cbc_encrypt(const unsigned char *in, unsigned char *out,
++    size_t length, const SM4_KEY *key,
++    unsigned char *ivec, const int enc)
++{
++	sm4_crypt_cbc((sm4_context *)key->key_data, enc, length, ivec, in, out);
++	return;
++}
+
+Property changes on: crypto/sm4/sm4_core.c
+___________________________________________________________________
+Added: svn:executable
+   + *
+
+Index: crypto/sm4/Makefile
+===================================================================
+--- crypto/sm4/Makefile	(revision 0)
++++ crypto/sm4/Makefile	(revision 0)
+@@ -0,0 +1,95 @@
++#
++# OpenSSL/crypto/sm4/Makefile
++#
++
++DIR=	sm4
++TOP=	../..
++CC=	cc
++CPP=	$(CC) -E
++INCLUDES=-I$(TOP) -I../../include
++CFLAG=-g
++MAKEFILE=	Makefile
++AR=		ar r
++RANLIB=		ranlib
++DES_ENC=	sm4_core.o 
++
++CFLAGS= $(INCLUDES) $(CFLAG)
++ASFLAGS= $(INCLUDES) $(ASFLAG)
++AFLAGS= $(ASFLAGS)
++
++GENERAL=Makefile
++#TEST=sm4test.c
++APPS=
++
++LIB=$(TOP)/libsg_crypto.a
++LIBSRC=sm4_core.c sm4_soft.c
++
++LIBOBJ= sm4_core.o sm4_soft.o
++
++SRC= $(LIBSRC)
++
++EXHEADER= sm4.h
++HEADER=	sm4_soft.h $(EXHEADER)
++
++ALL=    $(GENERAL) $(SRC) $(HEADER)
++
++top:
++	(cd ../..; $(MAKE) DIRS=crypto SDIRS=$(DIR) sub_all)
++
++all:	lib
++
++lib:	$(LIBOBJ)
++	$(AR) $(LIB) $(LIBOBJ)
++	$(RANLIB) $(LIB) || echo Never mind.
++	@touch lib
++
++# sm4: sm4test.o lib
++#	$(CC) $(CFLAGS) -o sm4 sm4test.o $(LIB)
++
++files:
++	$(PERL) $(TOP)/util/files.pl Makefile >> $(TOP)/MINFO
++
++links:
++	@$(PERL) $(TOP)/util/mklink.pl ../../include/openssl $(EXHEADER)
++	@$(PERL) $(TOP)/util/mklink.pl ../../test $(TEST)
++	@$(PERL) $(TOP)/util/mklink.pl ../../apps $(APPS)
++
++# We need to use force because 'install' matches 'INSTALL' on case
++# insensitive systems
++FRC.install:
++install: FRC.install
++	@[ -n "$(INSTALLTOP)" ] # should be set by top Makefile...
++	@headerlist="$(EXHEADER)"; for i in $$headerlist ; \
++	do  \
++	(cp $$i $(INSTALL_PREFIX)$(INSTALLTOP)/include/openssl/$$i; \
++	chmod 644 $(INSTALL_PREFIX)$(INSTALLTOP)/include/openssl/$$i ); \
++	done;
++
++tags:
++	ctags $(SRC)
++
++tests:
++
++lint:
++	lint -DLINT $(INCLUDES) $(SRC)>fluff
++
++depend:
++	@[ -n "$(MAKEDEPEND)" ] # should be set by upper Makefile...
++	$(MAKEDEPEND) -- $(CFLAG) $(INCLUDES) $(DEPFLAG) -- $(PROGS) $(LIBSRC)
++
++dclean:
++	$(PERL) -pe 'if (/^# DO NOT DELETE THIS LINE/) {print; exit(0);}' $(MAKEFILE) >Makefile.new
++	mv -f Makefile.new $(MAKEFILE)
++
++clean:
++	rm -f *.s *.o *.obj des lib tags core .pure .nfs* *.old *.bak fluff
++
++# DO NOT DELETE THIS LINE -- make depend depends on it.
++
++sm4_core.o: ../../include/openssl/sm4.h 
++sm4_core.o: ../../include/openssl/e_os2.h ../../include/openssl/opensslconf.h
++sm4_core.o: ../../include/openssl/ossl_typ.h ../../include/openssl/safestack.h
++sm4_core.o: ../../include/openssl/stack.h ../../include/openssl/symhacks.h
++sm4_core.o: ../../include/openssl/ui.h ../../include/openssl/ui_compat.h
++sm4_core.o: sm4_core.c 
++sm4_soft.o: sm4_soft.c sm4_soft.h
+
+Property changes on: crypto/sm4/Makefile
+___________________________________________________________________
+Added: svn:executable
+   + *
+
+Index: include/openssl/sm4.h
+===================================================================
+--- include/openssl/sm4.h	(revision 0)
++++ include/openssl/sm4.h	(revision 0)
+@@ -0,0 +1 @@
++link ../../crypto/sm4/sm4.h
+\ No newline at end of file
+
+Property changes on: include/openssl/sm4.h
+___________________________________________________________________
+Added: svn:special
+   + *
+

@@ -1,0 +1,1356 @@
+Index: apps/Makefile
+===================================================================
+--- apps/Makefile	(revision 8348)
++++ apps/Makefile	(working copy)
+@@ -24,10 +24,10 @@
+ 
+ GENERAL=Makefile makeapps.com install.com
+ 
+-DLIBCRYPTO=../libcrypto.a
+-DLIBSSL=../libssl.a
+-LIBCRYPTO=-L.. -lcrypto
+-LIBSSL=-L.. -lssl
++DLIBCRYPTO=../libsg_crypto.a
++DLIBSSL=../libsg_ssl.a
++LIBCRYPTO=-L.. -lsg_crypto
++LIBSSL=-L.. -lsg_ssl
+ 
+ PROGRAM= openssl
+ 
+Index: apps/openssl.c
+===================================================================
+--- apps/openssl.c	(revision 8348)
++++ apps/openssl.c	(working copy)
+@@ -344,8 +344,10 @@
+ 		if (ERR_GET_REASON(ERR_peek_last_error())
+ 		    == CONF_R_NO_SUCH_FILE)
+ 			{
++				/*
+ 			BIO_printf(bio_err,
+ 				   "WARNING: can't open config file: %s\n",p);
++				   */
+ 			ERR_clear_error();
+ 			NCONF_free(config);
+ 			config = NULL;
+Index: Makefile.compile
+===================================================================
+--- Makefile.compile	(revision 8348)
++++ Makefile.compile	(working copy)
+@@ -11,11 +11,11 @@
+ SHLIB_VERSION_HISTORY=
+ SHLIB_MAJOR=1
+ SHLIB_MINOR=0.0
+-SHLIB_EXT=
+-PLATFORM=dist
+-OPTIONS= no-ec_nistp_64_gcc_128 no-gmp no-jpake no-krb5 no-md2 no-rc5 no-rfc3779 no-sctp no-shared no-store no-zlib no-zlib-dynamic static-engine
+-CONFIGURE_ARGS=dist
+-SHLIB_TARGET=
++SHLIB_EXT=.so.$(SHLIB_MAJOR).$(SHLIB_MINOR)
++PLATFORM=linux-x86_64
++OPTIONS=enable-shared -Wa,--noexecstack no-ec_nistp_64_gcc_128 no-gmp no-jpake no-krb5 no-md2 no-rc5 no-rfc3779 no-sctp no-store no-zlib no-zlib-dynamic no-static-engine
++CONFIGURE_ARGS=linux-x86_64 shared -Wa,--noexecstack
++SHLIB_TARGET=linux-shared
+ 
+ # HERE indicates where this Makefile lives.  This can be used to indicate
+ # where sub-Makefiles are expected to be.  Currently has very limited usage,
+@@ -59,11 +59,11 @@
+ # equal 4.
+ # PKCS1_CHECK - pkcs1 tests.
+ 
+-CC= cc
+-CFLAG= -O
++CC= gcc
++CFLAG= -fPIC -DOPENSSL_PIC -DOPENSSL_THREADS -D_REENTRANT -DDSO_DLFCN -DHAVE_DLFCN_H -Wa,--noexecstack -m64 -DL_ENDIAN -DTERMIO -O3 -Wall -DOPENSSL_IA32_SSE2 -DOPENSSL_BN_ASM_MONT -DOPENSSL_BN_ASM_MONT5 -DOPENSSL_BN_ASM_GF2m -DSHA1_ASM -DSHA256_ASM -DSHA512_ASM -DMD5_ASM -DAES_ASM -DVPAES_ASM -DBSAES_ASM -DWHIRLPOOL_ASM -DGHASH_ASM
+ DEPFLAG= -DOPENSSL_NO_EC_NISTP_64_GCC_128 -DOPENSSL_NO_GMP -DOPENSSL_NO_JPAKE -DOPENSSL_NO_MD2 -DOPENSSL_NO_RC5 -DOPENSSL_NO_RFC3779 -DOPENSSL_NO_SCTP -DOPENSSL_NO_STORE
+ PEX_LIBS= 
+-EX_LIBS= 
++EX_LIBS= -ldl
+ EXE_EXT= 
+ ARFLAGS= 
+ AR= ar $(ARFLAGS) r
+@@ -72,7 +72,7 @@
+ PERL= /usr/bin/perl
+ TAR= tar
+ TARFLAGS= --no-recursion --record-size=10240
+-MAKEDEPPROG=makedepend
++MAKEDEPPROG= gcc
+ LIBDIR=lib
+ 
+ # We let the C compiler driver to take care of .s files. This is done in
+@@ -88,22 +88,22 @@
+ PROCESSOR= 
+ 
+ # CPUID module collects small commonly used assembler snippets
+-CPUID_OBJ= mem_clr.o
+-BN_ASM= bn_asm.o
++CPUID_OBJ= x86_64cpuid.o
++BN_ASM= x86_64-gcc.o x86_64-mont.o x86_64-mont5.o x86_64-gf2m.o modexp512-x86_64.o
+ DES_ENC= des_enc.o fcrypt_b.o
+-AES_ENC= aes_core.o aes_cbc.o
++AES_ENC= aes-x86_64.o vpaes-x86_64.o bsaes-x86_64.o aesni-x86_64.o aesni-sha1-x86_64.o
+ BF_ENC= bf_enc.o
+ CAST_ENC= c_enc.o
+-RC4_ENC= rc4_enc.o rc4_skey.o
++RC4_ENC= rc4-x86_64.o rc4-md5-x86_64.o
+ RC5_ENC= rc5_enc.o
+-MD5_ASM_OBJ= 
+-SHA1_ASM_OBJ= 
++MD5_ASM_OBJ= md5-x86_64.o
++SHA1_ASM_OBJ= sha1-x86_64.o sha256-x86_64.o sha512-x86_64.o
+ RMD160_ASM_OBJ= 
+-WP_ASM_OBJ= wp_block.o
+-CMLL_ENC= camellia.o cmll_misc.o cmll_cbc.o
+-MODES_ASM_OBJ= 
++WP_ASM_OBJ= wp-x86_64.o
++CMLL_ENC= cmll-x86_64.o cmll_misc.o
++MODES_ASM_OBJ= ghash-x86_64.o
+ ENGINES_ASM_OBJ= 
+-PERLASM_SCHEME= 
++PERLASM_SCHEME= elf
+ 
+ # KRB5 stuff
+ KRB5_INCLUDES=
+@@ -126,7 +126,7 @@
+ FIPSLIBDIR=
+ 
+ # The location of the library which contains fipscanister.o
+-# normally it will be libcrypto unless fipsdso is set in which
++# normally it will be libsg_crypto unless fipsdso is set in which
+ # case it will be libfips. If not compiling in FIPS mode at all
+ # this is empty making it a useful test for a FIPS compile.
+ 
+@@ -171,12 +171,12 @@
+ ONEDIRS=out tmp
+ EDIRS=  times doc bugs util include certs ms shlib mt demos perl sf dep VMS
+ WDIRS=  windows
+-LIBS=   libcrypto.a libssl.a
+-SHARED_CRYPTO=libcrypto$(SHLIB_EXT)
+-SHARED_SSL=libssl$(SHLIB_EXT)
+-SHARED_LIBS=
+-SHARED_LIBS_LINK_EXTS=
+-SHARED_LDFLAGS=
++LIBS=   libsg_crypto.a libsg_ssl.a
++SHARED_CRYPTO=libsg_crypto$(SHLIB_EXT)
++SHARED_SSL=libsg_ssl$(SHLIB_EXT)
++SHARED_LIBS=$(SHARED_CRYPTO) $(SHARED_SSL)
++SHARED_LIBS_LINK_EXTS=.so.$(SHLIB_MAJOR) .so
++SHARED_LDFLAGS=-m64
+ 
+ GENERAL=        Makefile
+ BASENAME=       openssl
+@@ -186,7 +186,7 @@
+ EXHEADER=       e_os2.h
+ HEADER=         e_os.h
+ 
+-all: Makefile build_all openssl.pc libssl.pc libcrypto.pc
++all: Makefile build_all openssl.pc libsg_ssl.pc libsg_crypto.pc
+ 
+ # as we stick to -e, CLEARENV ensures that local variables in lower
+ # Makefiles remain local and variable. $${VAR+VAR} is tribute to Korn
+@@ -291,28 +291,28 @@
+ build_testapps:
+ 	@dir=crypto; target=testapps; $(BUILD_ONE_CMD)
+ 
+-fips_premain_dso$(EXE_EXT): libcrypto.a
++fips_premain_dso$(EXE_EXT): libsg_crypto.a
+ 	[ -z "$(FIPSCANLIB)" ] || $(CC) $(CFLAG) -Iinclude \
+ 		-DFINGERPRINT_PREMAIN_DSO_LOAD -o $@  \
+ 		$(FIPSLIBDIR)fips_premain.c $(FIPSLIBDIR)fipscanister.o \
+-		libcrypto.a $(EX_LIBS)
++		libsg_crypto.a $(EX_LIBS)
+ 
+-libcrypto$(SHLIB_EXT): libcrypto.a fips_premain_dso$(EXE_EXT)
++libsg_crypto$(SHLIB_EXT): libsg_crypto.a fips_premain_dso$(EXE_EXT)
+ 	@if [ "$(SHLIB_TARGET)" != "" ]; then \
+-		if [ "$(FIPSCANLIB)" = "libcrypto" ]; then \
+-			FIPSLD_LIBCRYPTO=libcrypto.a ; \
++		if [ "$(FIPSCANLIB)" = "libsg_crypto" ]; then \
++			FIPSLD_LIBCRYPTO=libsg_crypto.a ; \
+ 			FIPSLD_CC="$(CC)"; CC=$(FIPSDIR)/bin/fipsld; \
+ 			export CC FIPSLD_CC FIPSLD_LIBCRYPTO; \
+ 		fi; \
+-		$(MAKE) -e SHLIBDIRS=crypto build-shared; \
++		$(MAKE) -e SHLIBDIRS=sg_crypto build-shared; \
+ 	else \
+ 		echo "There's no support for shared libraries on this platform" >&2; \
+ 		exit 1; \
+ 	fi
+ 
+-libssl$(SHLIB_EXT): libcrypto$(SHLIB_EXT) libssl.a
++libsg_ssl$(SHLIB_EXT): libsg_crypto$(SHLIB_EXT) libsg_ssl.a
+ 	@if [ "$(SHLIB_TARGET)" != "" ]; then \
+-		$(MAKE) SHLIBDIRS=ssl SHLIBDEPS='-lcrypto' build-shared; \
++		$(MAKE) SHLIBDIRS=sg_ssl SHLIBDEPS='-lsg_crypto' build-shared; \
+ 	else \
+ 		echo "There's no support for shared libraries on this platform" >&2; \
+ 		exit 1; \
+@@ -356,21 +356,21 @@
+ 		libs="-l$$i $$libs"; \
+ 	done
+ 
+-libcrypto.pc: Makefile
++libsg_crypto.pc: Makefile
+ 	@ ( echo 'prefix=$(INSTALLTOP)'; \
+ 	    echo 'exec_prefix=$${prefix}'; \
+ 	    echo 'libdir=$${exec_prefix}/$(LIBDIR)'; \
+ 	    echo 'includedir=$${prefix}/include'; \
+ 	    echo ''; \
+-	    echo 'Name: OpenSSL-libcrypto'; \
++	    echo 'Name: OpenSSL-libsg_crypto'; \
+ 	    echo 'Description: OpenSSL cryptography library'; \
+ 	    echo 'Version: '$(VERSION); \
+ 	    echo 'Requires: '; \
+-	    echo 'Libs: -L$${libdir} -lcrypto'; \
++	    echo 'Libs: -L$${libdir} -lsg_crypto'; \
+ 	    echo 'Libs.private: $(EX_LIBS)'; \
+-	    echo 'Cflags: -I$${includedir} $(KRB5_INCLUDES)' ) > libcrypto.pc
++	    echo 'Cflags: -I$${includedir} $(KRB5_INCLUDES)' ) > libsg_crypto.pc
+ 
+-libssl.pc: Makefile
++libsg_ssl.pc: Makefile
+ 	@ ( echo 'prefix=$(INSTALLTOP)'; \
+ 	    echo 'exec_prefix=$${prefix}'; \
+ 	    echo 'libdir=$${exec_prefix}/$(LIBDIR)'; \
+@@ -380,9 +380,9 @@
+ 	    echo 'Description: Secure Sockets Layer and cryptography libraries'; \
+ 	    echo 'Version: '$(VERSION); \
+ 	    echo 'Requires: '; \
+-	    echo 'Libs: -L$${libdir} -lssl -lcrypto'; \
++	    echo 'Libs: -L$${libdir} -lsg_ssl -lsg_crypto'; \
+ 	    echo 'Libs.private: $(EX_LIBS)'; \
+-	    echo 'Cflags: -I$${includedir} $(KRB5_INCLUDES)' ) > libssl.pc
++	    echo 'Cflags: -I$${includedir} $(KRB5_INCLUDES)' ) > libsg_ssl.pc
+ 
+ openssl.pc: Makefile
+ 	@ ( echo 'prefix=$(INSTALLTOP)'; \
+@@ -394,7 +394,7 @@
+ 	    echo 'Description: Secure Sockets Layer and cryptography libraries and tools'; \
+ 	    echo 'Version: '$(VERSION); \
+ 	    echo 'Requires: '; \
+-	    echo 'Libs: -L$${libdir} -lssl -lcrypto'; \
++	    echo 'Libs: -L$${libdir} -lsg_ssl -lsg_crypto'; \
+ 	    echo 'Libs.private: $(EX_LIBS)'; \
+ 	    echo 'Cflags: -I$${includedir} $(KRB5_INCLUDES)' ) > openssl.pc
+ 
+@@ -410,7 +410,7 @@
+ 	rm -f shlib/*.o *.o core a.out fluff rehash.time testlog make.log cctest cctest.c
+ 	@set -e; target=clean; $(RECURSIVE_BUILD_CMD)
+ 	rm -f $(LIBS)
+-	rm -f openssl.pc libssl.pc libcrypto.pc
++	rm -f openssl.pc libsg_ssl.pc libsg_crypto.pc
+ 	rm -f speed.* .pure
+ 	rm -f $(TARFILE)
+ 	@set -e; for i in $(ONEDIRS) ;\
+@@ -450,6 +450,8 @@
+ 		touch rehash.time; \
+ 	else :; fi
+ 
++#		$(PERL) tools/c_rehash certs/demo) && \
++
+ test:   tests
+ 
+ tests: rehash
+@@ -607,10 +609,10 @@
+ 			sed -e '1,/^$$/d' doc/openssl-shared.txt; \
+ 		fi; \
+ 	fi
+-	cp libcrypto.pc $(INSTALL_PREFIX)$(INSTALLTOP)/$(LIBDIR)/pkgconfig
+-	chmod 644 $(INSTALL_PREFIX)$(INSTALLTOP)/$(LIBDIR)/pkgconfig/libcrypto.pc
+-	cp libssl.pc $(INSTALL_PREFIX)$(INSTALLTOP)/$(LIBDIR)/pkgconfig
+-	chmod 644 $(INSTALL_PREFIX)$(INSTALLTOP)/$(LIBDIR)/pkgconfig/libssl.pc
++	cp libsg_crypto.pc $(INSTALL_PREFIX)$(INSTALLTOP)/$(LIBDIR)/pkgconfig
++	chmod 644 $(INSTALL_PREFIX)$(INSTALLTOP)/$(LIBDIR)/pkgconfig/libsg_crypto.pc
++	cp libsg_ssl.pc $(INSTALL_PREFIX)$(INSTALLTOP)/$(LIBDIR)/pkgconfig
++	chmod 644 $(INSTALL_PREFIX)$(INSTALLTOP)/$(LIBDIR)/pkgconfig/libsg_ssl.pc
+ 	cp openssl.pc $(INSTALL_PREFIX)$(INSTALLTOP)/$(LIBDIR)/pkgconfig
+ 	chmod 644 $(INSTALL_PREFIX)$(INSTALLTOP)/$(LIBDIR)/pkgconfig/openssl.pc
+ 
+Index: demos/easy_tls/Makefile
+===================================================================
+--- demos/easy_tls/Makefile	(revision 8348)
++++ demos/easy_tls/Makefile	(working copy)
+@@ -40,10 +40,10 @@
+ # have names like <openssl/ssl.h> (not just <ssl.h>).
+ OPENSSLINCLUDES=-I$(OPENSSLDIR)/include
+ 
+-# libcrypto.a and libssl.a are directly in $(OPENSSLDIR) if this is
++# libsg_crypto.a and libsg_ssl.a are directly in $(OPENSSLDIR) if this is
+ # the compile directory, or in $(OPENSSLDIR)/lib if we use an installed
+ # library.  With the following definition, we can handle either case.
+-OPENSSLLIBS=-L$(OPENSSLDIR) -L$(OPENSSLDIR)/lib -lssl -lcrypto
++OPENSSLLIBS=-L$(OPENSSLDIR) -L$(OPENSSLDIR)/lib -lsg_ssl -lsg_crypto
+ 
+ 
+ #############################################################################
+Index: demos/tunala/Makefile
+===================================================================
+--- demos/tunala/Makefile	(revision 8348)
++++ demos/tunala/Makefile	(working copy)
+@@ -15,7 +15,7 @@
+ COMPILE=$(CC) $(CFLAGS) -c
+ 
+ # Edit, particularly the "-ldl" if not building with "dlfcn" support
+-LINK_FLAGS=-L$(SSL_LIBDIR) -lssl -lcrypto -ldl
++LINK_FLAGS=-L$(SSL_LIBDIR) -lsg_ssl -lsg_crypto -ldl
+ 
+ SRCS=buffer.c cb.c ip.c sm.c tunala.c breakage.c
+ OBJS=buffer.o cb.o ip.o sm.o tunala.o breakage.o
+Index: demos/maurice/Makefile
+===================================================================
+--- demos/maurice/Makefile	(revision 8348)
++++ demos/maurice/Makefile	(working copy)
+@@ -1,6 +1,6 @@
+ CC=cc
+ CFLAGS= -g -I../../include -Wall
+-LIBS=  -L../.. -lcrypto
++LIBS=  -L../.. -lsg_crypto
+ EXAMPLES=example1 example2 example3 example4
+ 
+ all: $(EXAMPLES) 
+Index: demos/engines/cluster_labs/Makefile
+===================================================================
+--- demos/engines/cluster_labs/Makefile	(revision 8348)
++++ demos/engines/cluster_labs/Makefile	(working copy)
+@@ -44,7 +44,7 @@
+ LINK_SO=	\
+   ld -r -o $(LIBNAME).o $$ALLSYMSFLAGS $(LIB) && \
+   (nm -Pg $(LIBNAME).o | grep ' [BDT] ' | cut -f1 -d' ' > $(LIBNAME).exp; \
+-   $$SHAREDCMD $$SHAREDFLAGS -o $(SHLIB) $(LIBNAME).o -L ../../.. -lcrypto -lc)
++   $$SHAREDCMD $$SHAREDFLAGS -o $(SHLIB) $(LIBNAME).o -L ../../.. -lsg_crypto -lc)
+ 
+ $(SHLIB).gnu:	$(LIB)
+ 		ALLSYMSFLAGS='--whole-archive' \
+Index: demos/engines/rsaref/Makefile
+===================================================================
+--- demos/engines/rsaref/Makefile	(revision 8348)
++++ demos/engines/rsaref/Makefile	(working copy)
+@@ -53,7 +53,7 @@
+ LINK_SO=	\
+   ld -r -o $(LIBNAME).o $$ALLSYMSFLAGS $(LIB) install/librsaref.a && \
+   (nm -Pg $(LIBNAME).o | grep ' [BDT] ' | cut -f1 -d' ' > $(LIBNAME).exp; \
+-   $$SHAREDCMD $$SHAREDFLAGS -o $(SHLIB) $(LIBNAME).o -L ../../.. -lcrypto -lc)
++   $$SHAREDCMD $$SHAREDFLAGS -o $(SHLIB) $(LIBNAME).o -L ../../.. -lsg_crypto -lc)
+ 
+ $(SHLIB).darwin:	$(LIB) install/librsaref.a
+ 		ALLSYMSFLAGS='-all_load' \
+Index: demos/engines/zencod/Makefile
+===================================================================
+--- demos/engines/zencod/Makefile	(revision 8348)
++++ demos/engines/zencod/Makefile	(working copy)
+@@ -44,7 +44,7 @@
+ LINK_SO=	\
+   ld -r -o $(LIBNAME).o $$ALLSYMSFLAGS $(LIB) && \
+   (nm -Pg $(LIBNAME).o | grep ' [BDT] ' | cut -f1 -d' ' > $(LIBNAME).exp; \
+-   $$SHAREDCMD $$SHAREDFLAGS -o $(SHLIB) $(LIBNAME).o -L ../../.. -lcrypto -lc)
++   $$SHAREDCMD $$SHAREDFLAGS -o $(SHLIB) $(LIBNAME).o -L ../../.. -lsg_crypto -lc)
+ 
+ $(SHLIB).gnu:	$(LIB)
+ 		ALLSYMSFLAGS='--whole-archive' \
+Index: demos/engines/ibmca/Makefile
+===================================================================
+--- demos/engines/ibmca/Makefile	(revision 8348)
++++ demos/engines/ibmca/Makefile	(working copy)
+@@ -44,7 +44,7 @@
+ LINK_SO=	\
+   ld -r -o $(LIBNAME).o $$ALLSYMSFLAGS $(LIB) && \
+   (nm -Pg $(LIBNAME).o | grep ' [BDT] ' | cut -f1 -d' ' > $(LIBNAME).exp; \
+-   $$SHAREDCMD $$SHAREDFLAGS -o $(SHLIB) $(LIBNAME).o -L ../../.. -lcrypto -lc)
++   $$SHAREDCMD $$SHAREDFLAGS -o $(SHLIB) $(LIBNAME).o -L ../../.. -lsg_crypto -lc)
+ 
+ $(SHLIB).gnu:	$(LIB)
+ 		ALLSYMSFLAGS='--whole-archive' \
+Index: demos/sign/Makefile
+===================================================================
+--- demos/sign/Makefile	(revision 8348)
++++ demos/sign/Makefile	(working copy)
+@@ -1,6 +1,6 @@
+ CC=cc
+ CFLAGS= -g -I../../include -Wall
+-LIBS=  -L../.. -lcrypto
++LIBS=  -L../.. -lsg_crypto
+ EXAMPLES=sign
+ 
+ all: $(EXAMPLES) 
+Index: demos/state_machine/Makefile
+===================================================================
+--- demos/state_machine/Makefile	(revision 8348)
++++ demos/state_machine/Makefile	(working copy)
+@@ -3,7 +3,7 @@
+ all: state_machine
+ 
+ state_machine: state_machine.o
+-	$(CC) -o state_machine state_machine.o -L../.. -lssl -lcrypto
++	$(CC) -o state_machine state_machine.o -L../.. -lsg_ssl -lsg_crypto
+ 
+ test: state_machine
+ 	./state_machine 10000 ../../apps/server.pem ../../apps/server.pem
+Index: demos/bio/Makefile
+===================================================================
+--- demos/bio/Makefile	(revision 8348)
++++ demos/bio/Makefile	(working copy)
+@@ -1,6 +1,6 @@
+ CC=cc
+ CFLAGS= -g -I../../include
+-LIBS= -L../.. ../../libssl.a ../../libcrypto.a
++LIBS= -L../.. ../../libsg_ssl.a ../../libsg_crypto.a
+ EXAMPLES=saccept sconnect
+ 
+ all: $(EXAMPLES) 
+Index: demos/prime/Makefile
+===================================================================
+--- demos/prime/Makefile	(revision 8348)
++++ demos/prime/Makefile	(working copy)
+@@ -1,6 +1,6 @@
+ CC=cc
+ CFLAGS= -g -I../../include -Wall
+-LIBS=  -L../.. -lcrypto
++LIBS=  -L../.. -lsg_crypto
+ EXAMPLES=prime
+ 
+ all: $(EXAMPLES) 
+Index: demos/eay/Makefile
+===================================================================
+--- demos/eay/Makefile	(revision 8348)
++++ demos/eay/Makefile	(working copy)
+@@ -1,7 +1,7 @@
+ CC=cc
+ CFLAGS= -g -I../../include
+-#LIBS=  -L../.. -lcrypto -lssl
+-LIBS= -L../.. ../../libssl.a ../../libcrypto.a
++#LIBS=  -L../.. -lsg_crypto -lsg_ssl
++LIBS= -L../.. ../../libsg_ssl.a ../../libsg_crypto.a
+ 
+ # the file conn.c requires a file "proxy.h" which I couldn't find...
+ #EXAMPLES=base64 conn loadrsa
+Index: test/Makefile
+===================================================================
+--- test/Makefile	(revision 8348)
++++ test/Makefile	(working copy)
+@@ -23,10 +23,10 @@
+ 	tpkcs7.com tpkcs7d.com tverify.com testgen.com testss.com testssl.com \
+ 	testca.com VMSca-response.1 VMSca-response.2
+ 
+-DLIBCRYPTO= ../libcrypto.a
+-DLIBSSL= ../libssl.a
+-LIBCRYPTO= -L.. -lcrypto
+-LIBSSL= -L.. -lssl
++DLIBCRYPTO= ../libsg_crypto.a
++DLIBSSL= ../libsg_ssl.a
++LIBCRYPTO= -L.. -lsg_crypto
++LIBSSL= -L.. -lsg_ssl
+ 
+ BNTEST=		bntest
+ ECTEST=		ectest
+Index: crypto/ecdsa/Makefile
+===================================================================
+--- crypto/ecdsa/Makefile	(revision 8348)
++++ crypto/ecdsa/Makefile	(working copy)
+@@ -16,7 +16,7 @@
+ TEST=ecdsatest.c
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC=	ecs_lib.c ecs_asn1.c ecs_ossl.c ecs_sign.c ecs_vrf.c ecs_err.c
+ 
+ LIBOBJ=	ecs_lib.o ecs_asn1.o ecs_ossl.o ecs_sign.o ecs_vrf.o ecs_err.o
+Index: crypto/bf/Makefile
+===================================================================
+--- crypto/bf/Makefile	(revision 8348)
++++ crypto/bf/Makefile	(working copy)
+@@ -21,7 +21,7 @@
+ TEST=bftest.c
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC=bf_skey.c bf_ecb.c bf_enc.c bf_cfb64.c bf_ofb64.c 
+ LIBOBJ=bf_skey.o bf_ecb.o $(BF_ENC) bf_cfb64.o bf_ofb64.o
+ 
+Index: crypto/objects/Makefile
+===================================================================
+--- crypto/objects/Makefile	(revision 8348)
++++ crypto/objects/Makefile	(working copy)
+@@ -17,7 +17,7 @@
+ TEST=
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC=	o_names.c obj_dat.c obj_lib.c obj_err.c obj_xref.c
+ LIBOBJ= o_names.o obj_dat.o obj_lib.o obj_err.o obj_xref.o
+ 
+Index: crypto/bn/Makefile
+===================================================================
+--- crypto/bn/Makefile	(revision 8348)
++++ crypto/bn/Makefile	(working copy)
+@@ -21,7 +21,7 @@
+ TEST=bntest.c exptest.c
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC=	bn_add.c bn_div.c bn_exp.c bn_lib.c bn_ctx.c bn_mul.c bn_mod.c \
+ 	bn_print.c bn_rand.c bn_shift.c bn_word.c bn_blind.c \
+ 	bn_kron.c bn_sqrt.c bn_gcd.c bn_prime.c bn_err.c bn_sqr.c bn_asm.c \
+@@ -49,11 +49,11 @@
+ bn_prime.h: bn_prime.pl
+ 	$(PERL) bn_prime.pl >bn_prime.h
+ 
+-divtest: divtest.c ../../libcrypto.a
+-	cc -I../../include divtest.c -o divtest ../../libcrypto.a
++divtest: divtest.c ../../libsg_crypto.a
++	cc -I../../include divtest.c -o divtest ../../libsg_crypto.a
+ 
+-bnbug: bnbug.c ../../libcrypto.a top
+-	cc -g -I../../include bnbug.c -o bnbug ../../libcrypto.a
++bnbug: bnbug.c ../../libsg_crypto.a top
++	cc -g -I../../include bnbug.c -o bnbug ../../libsg_crypto.a
+ 
+ lib:	$(LIBOBJ)
+ 	$(AR) $(LIB) $(LIBOBJ)
+@@ -151,11 +151,11 @@
+ 
+ exptest:
+ 	rm -f exptest
+-	gcc -I../../include -g2 -ggdb -o exptest exptest.c ../../libcrypto.a
++	gcc -I../../include -g2 -ggdb -o exptest exptest.c ../../libsg_crypto.a
+ 
+ div:
+ 	rm -f a.out
+-	gcc -I.. -g div.c ../../libcrypto.a
++	gcc -I.. -g div.c ../../libsg_crypto.a
+ 
+ tags:
+ 	ctags $(SRC)
+Index: crypto/idea/Makefile
+===================================================================
+--- crypto/idea/Makefile	(revision 8348)
++++ crypto/idea/Makefile	(working copy)
+@@ -16,7 +16,7 @@
+ TEST=ideatest.c
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC=i_cbc.c i_cfb64.c i_ofb64.c i_ecb.c i_skey.c
+ LIBOBJ=i_cbc.o i_cfb64.o i_ofb64.o i_ecb.o i_skey.o
+ 
+Index: crypto/cmac/Makefile
+===================================================================
+--- crypto/cmac/Makefile	(revision 8348)
++++ crypto/cmac/Makefile	(working copy)
+@@ -16,7 +16,7 @@
+ TEST=
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC=cmac.c cm_ameth.c cm_pmeth.c
+ LIBOBJ=cmac.o cm_ameth.o cm_pmeth.o
+ 
+Index: crypto/pkcs12/Makefile
+===================================================================
+--- crypto/pkcs12/Makefile	(revision 8348)
++++ crypto/pkcs12/Makefile	(working copy)
+@@ -16,7 +16,7 @@
+ TEST=
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC= p12_add.c p12_asn.c p12_attr.c p12_crpt.c p12_crt.c p12_decr.c \
+ 	p12_init.c p12_key.c p12_kiss.c p12_mutl.c\
+ 	p12_utl.c p12_npas.c pk12err.c p12_p8d.c p12_p8e.c
+Index: crypto/dsa/Makefile
+===================================================================
+--- crypto/dsa/Makefile	(revision 8348)
++++ crypto/dsa/Makefile	(working copy)
+@@ -16,7 +16,7 @@
+ TEST=dsatest.c
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC= dsa_gen.c dsa_key.c dsa_lib.c dsa_asn1.c dsa_vrf.c dsa_sign.c \
+ 	dsa_err.c dsa_ossl.c dsa_depr.c dsa_ameth.c dsa_pmeth.c dsa_prn.c
+ LIBOBJ= dsa_gen.o dsa_key.o dsa_lib.o dsa_asn1.o dsa_vrf.o dsa_sign.o \
+Index: crypto/aes/Makefile
+===================================================================
+--- crypto/aes/Makefile	(revision 8348)
++++ crypto/aes/Makefile	(working copy)
+@@ -22,7 +22,7 @@
+ TEST=
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC=aes_core.c aes_misc.c aes_ecb.c aes_cbc.c aes_cfb.c aes_ofb.c \
+        aes_ctr.c aes_ige.c aes_wrap.c
+ LIBOBJ=aes_misc.o aes_ecb.o aes_cfb.o aes_ofb.o aes_ctr.o aes_ige.o aes_wrap.o \
+Index: crypto/buffer/Makefile
+===================================================================
+--- crypto/buffer/Makefile	(revision 8348)
++++ crypto/buffer/Makefile	(working copy)
+@@ -16,7 +16,7 @@
+ TEST=
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC= buffer.c buf_str.c buf_err.c
+ LIBOBJ= buffer.o buf_str.o buf_err.o
+ 
+Index: crypto/Makefile
+===================================================================
+--- crypto/Makefile	(revision 8348)
++++ crypto/Makefile	(working copy)
+@@ -32,8 +32,8 @@
+ 
+ GENERAL=Makefile README crypto-lib.com install.com
+ 
+-LIB= $(TOP)/libcrypto.a
+-SHARED_LIB= libcrypto$(SHLIB_EXT)
++LIB= $(TOP)/libsg_crypto.a
++SHARED_LIB= libsg_crypto$(SHLIB_EXT)
+ LIBSRC=	cryptlib.c mem.c mem_clr.c mem_dbg.c cversion.c ex_data.c cpt_err.c \
+ 	ebcdic.c uid.c o_time.c o_str.c o_dir.c o_fips.c o_init.c fips_ers.c
+ LIBOBJ= cryptlib.o mem.o mem_dbg.o cversion.o ex_data.o cpt_err.o ebcdic.o \
+Index: crypto/ripemd/Makefile
+===================================================================
+--- crypto/ripemd/Makefile	(revision 8348)
++++ crypto/ripemd/Makefile	(working copy)
+@@ -21,7 +21,7 @@
+ TEST=rmdtest.c
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC=rmd_dgst.c rmd_one.c
+ LIBOBJ=rmd_dgst.o rmd_one.o $(RMD160_ASM_OBJ)
+ 
+Index: crypto/seed/Makefile
+===================================================================
+--- crypto/seed/Makefile	(revision 8348)
++++ crypto/seed/Makefile	(working copy)
+@@ -17,7 +17,7 @@
+ TEST=
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC=seed.c seed_ecb.c seed_cbc.c seed_cfb.c seed_ofb.c
+ LIBOBJ=seed.o seed_ecb.o seed_cbc.o seed_cfb.o seed_ofb.o
+ 
+Index: crypto/cms/Makefile
+===================================================================
+--- crypto/cms/Makefile	(revision 8348)
++++ crypto/cms/Makefile	(working copy)
+@@ -16,7 +16,7 @@
+ TEST=
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC= cms_lib.c cms_asn1.c cms_att.c cms_io.c cms_smime.c cms_err.c \
+ 	cms_sd.c cms_dd.c cms_cd.c cms_env.c cms_enc.c cms_ess.c \
+ 	cms_pwri.c
+Index: crypto/rsa/Makefile
+===================================================================
+--- crypto/rsa/Makefile	(revision 8348)
++++ crypto/rsa/Makefile	(working copy)
+@@ -16,7 +16,7 @@
+ TEST=rsa_test.c
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC= rsa_eay.c rsa_gen.c rsa_lib.c rsa_sign.c rsa_saos.c rsa_err.c \
+ 	rsa_pk1.c rsa_ssl.c rsa_none.c rsa_oaep.c rsa_chk.c rsa_null.c \
+ 	rsa_pss.c rsa_x931.c rsa_asn1.c rsa_depr.c rsa_ameth.c rsa_prn.c \
+Index: crypto/mdc2/Makefile
+===================================================================
+--- crypto/mdc2/Makefile	(revision 8348)
++++ crypto/mdc2/Makefile	(working copy)
+@@ -16,7 +16,7 @@
+ TEST= mdc2test.c
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC=mdc2dgst.c mdc2_one.c
+ LIBOBJ=mdc2dgst.o mdc2_one.o
+ 
+Index: crypto/dso/Makefile
+===================================================================
+--- crypto/dso/Makefile	(revision 8348)
++++ crypto/dso/Makefile	(working copy)
+@@ -16,7 +16,7 @@
+ TEST=
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC= dso_dl.c dso_dlfcn.c dso_err.c dso_lib.c dso_null.c \
+ 	dso_openssl.c dso_win32.c dso_vms.c dso_beos.c
+ LIBOBJ= dso_dl.o dso_dlfcn.o dso_err.o dso_lib.o dso_null.o \
+Index: crypto/pkcs7/Makefile
+===================================================================
+--- crypto/pkcs7/Makefile	(revision 8348)
++++ crypto/pkcs7/Makefile	(working copy)
+@@ -19,7 +19,7 @@
+ TEST=
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC=	pk7_asn1.c pk7_lib.c pkcs7err.c pk7_doit.c pk7_smime.c pk7_attr.c \
+ 	pk7_mime.c bio_pk7.c
+ LIBOBJ= pk7_asn1.o pk7_lib.o pkcs7err.o pk7_doit.o pk7_smime.o pk7_attr.o \
+Index: crypto/jpake/Makefile
+===================================================================
+--- crypto/jpake/Makefile	(revision 8348)
++++ crypto/jpake/Makefile	(working copy)
+@@ -3,7 +3,7 @@
+ 
+ CFLAGS= $(INCLUDES) $(CFLAG)
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBOBJ=jpake.o jpake_err.o
+ LIBSRC=jpake.c jpake_err.c
+ 
+Index: crypto/store/Makefile
+===================================================================
+--- crypto/store/Makefile	(revision 8348)
++++ crypto/store/Makefile	(working copy)
+@@ -17,7 +17,7 @@
+ TEST=
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC= str_err.c str_lib.c str_meth.c str_mem.c
+ LIBOBJ= str_err.o str_lib.o str_meth.o str_mem.o
+ 
+Index: crypto/comp/Makefile
+===================================================================
+--- crypto/comp/Makefile	(revision 8348)
++++ crypto/comp/Makefile	(working copy)
+@@ -16,7 +16,7 @@
+ TEST=
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC= comp_lib.c comp_err.c \
+ 	c_rle.c c_zlib.c
+ 
+Index: crypto/lhash/Makefile
+===================================================================
+--- crypto/lhash/Makefile	(revision 8348)
++++ crypto/lhash/Makefile	(working copy)
+@@ -16,7 +16,7 @@
+ TEST=
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC=lhash.c lh_stats.c
+ LIBOBJ=lhash.o lh_stats.o
+ 
+Index: crypto/ecdh/Makefile
+===================================================================
+--- crypto/ecdh/Makefile	(revision 8348)
++++ crypto/ecdh/Makefile	(working copy)
+@@ -16,7 +16,7 @@
+ TEST=ecdhtest.c
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC=	ech_lib.c ech_ossl.c ech_key.c ech_err.c
+ 
+ LIBOBJ=	ech_lib.o ech_ossl.o ech_key.o ech_err.o
+Index: crypto/stack/Makefile
+===================================================================
+--- crypto/stack/Makefile	(revision 8348)
++++ crypto/stack/Makefile	(working copy)
+@@ -16,7 +16,7 @@
+ TEST=
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC=stack.c
+ LIBOBJ=stack.o
+ 
+Index: crypto/engine/Makefile
+===================================================================
+--- crypto/engine/Makefile	(revision 8348)
++++ crypto/engine/Makefile	(working copy)
+@@ -16,7 +16,7 @@
+ TEST= enginetest.c
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC= eng_err.c eng_lib.c eng_list.c eng_init.c eng_ctrl.c \
+ 	eng_table.c eng_pkey.c eng_fat.c eng_all.c \
+ 	tb_rsa.c tb_dsa.c tb_ecdsa.c tb_dh.c tb_ecdh.c tb_rand.c tb_store.c \
+Index: crypto/x509v3/Makefile
+===================================================================
+--- crypto/x509v3/Makefile	(revision 8348)
++++ crypto/x509v3/Makefile	(working copy)
+@@ -16,7 +16,7 @@
+ TEST=
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC=	v3_bcons.c v3_bitst.c v3_conf.c v3_extku.c v3_ia5.c v3_lib.c \
+ v3_prn.c v3_utl.c v3err.c v3_genn.c v3_alt.c v3_skey.c v3_akey.c v3_pku.c \
+ v3_int.c v3_enum.c v3_sxnet.c v3_cpols.c v3_crld.c v3_purp.c v3_info.c \
+Index: crypto/opensslconf.h
+===================================================================
+--- crypto/opensslconf.h	(revision 8348)
++++ crypto/opensslconf.h	(working copy)
+@@ -35,9 +35,12 @@
+ 
+ #endif /* OPENSSL_DOING_MAKEDEPEND */
+ 
+-#ifndef OPENSSL_NO_DYNAMIC_ENGINE
+-# define OPENSSL_NO_DYNAMIC_ENGINE
++#ifndef OPENSSL_THREADS
++# define OPENSSL_THREADS
+ #endif
++#ifndef OPENSSL_NO_STATIC_ENGINE
++# define OPENSSL_NO_STATIC_ENGINE
++#endif
+ 
+ /* The OPENSSL_NO_* macros are also defined as NO_* if the application
+    asks for it.  This is a transient feature that is provided for those
+@@ -73,6 +76,8 @@
+ # endif
+ #endif
+ 
++#define OPENSSL_CPUID_OBJ
++
+ /* crypto/opensslconf.h.in */
+ 
+ /* Generate 80386 code? */
+@@ -119,7 +124,7 @@
+  * This enables code handling data aligned at natural CPU word
+  * boundary. See crypto/rc4/rc4_enc.c for further details.
+  */
+-#undef RC4_CHUNK
++#define RC4_CHUNK unsigned long
+ #endif
+ #endif
+ 
+@@ -127,7 +132,7 @@
+ /* If this is set to 'unsigned int' on a DEC Alpha, this gives about a
+  * %20 speed up (longs are 8 bytes, int's are 4). */
+ #ifndef DES_LONG
+-#define DES_LONG unsigned long
++#define DES_LONG unsigned int
+ #endif
+ #endif
+ 
+@@ -138,9 +143,9 @@
+ /* Should we define BN_DIV2W here? */
+ 
+ /* Only one for the following should be defined */
+-#undef SIXTY_FOUR_BIT_LONG
++#define SIXTY_FOUR_BIT_LONG
+ #undef SIXTY_FOUR_BIT
+-#define THIRTY_TWO_BIT
++#undef THIRTY_TWO_BIT
+ #endif
+ 
+ #if defined(HEADER_RC4_LOCL_H) && !defined(CONFIG_HEADER_RC4_LOCL_H)
+@@ -182,7 +187,7 @@
+ /* Unroll the inner loop, this sometimes helps, sometimes hinders.
+  * Very mucy CPU dependant */
+ #ifndef DES_UNROLL
+-#undef DES_UNROLL
++#define DES_UNROLL
+ #endif
+ 
+ /* These default values were supplied by
+Index: crypto/md2/Makefile
+===================================================================
+--- crypto/md2/Makefile	(revision 8348)
++++ crypto/md2/Makefile	(working copy)
+@@ -16,7 +16,7 @@
+ TEST=md2test.c
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC=md2_dgst.c md2_one.c
+ LIBOBJ=md2_dgst.o md2_one.o
+ 
+Index: crypto/txt_db/Makefile
+===================================================================
+--- crypto/txt_db/Makefile	(revision 8348)
++++ crypto/txt_db/Makefile	(working copy)
+@@ -16,7 +16,7 @@
+ TEST=
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC=txt_db.c
+ LIBOBJ=txt_db.o
+ 
+Index: crypto/md4/Makefile
+===================================================================
+--- crypto/md4/Makefile	(revision 8348)
++++ crypto/md4/Makefile	(working copy)
+@@ -17,7 +17,7 @@
+ TEST=md4test.c
+ APPS=md4.c
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC=md4_dgst.c md4_one.c
+ LIBOBJ=md4_dgst.o md4_one.o
+ 
+Index: crypto/conf/Makefile
+===================================================================
+--- crypto/conf/Makefile	(revision 8348)
++++ crypto/conf/Makefile	(working copy)
+@@ -16,7 +16,7 @@
+ TEST=
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC= conf_err.c conf_lib.c conf_api.c conf_def.c conf_mod.c \
+ 	 conf_mall.c conf_sap.c
+ 
+Index: crypto/md5/Makefile
+===================================================================
+--- crypto/md5/Makefile	(revision 8348)
++++ crypto/md5/Makefile	(working copy)
+@@ -21,7 +21,7 @@
+ TEST=md5test.c
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC=md5_dgst.c md5_one.c
+ LIBOBJ=md5_dgst.o md5_one.o $(MD5_ASM_OBJ)
+ 
+Index: crypto/err/Makefile
+===================================================================
+--- crypto/err/Makefile	(revision 8348)
++++ crypto/err/Makefile	(working copy)
+@@ -16,7 +16,7 @@
+ TEST=
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC=err.c err_all.c err_prn.c
+ LIBOBJ=err.o err_all.o err_prn.o
+ 
+Index: crypto/evp/Makefile
+===================================================================
+--- crypto/evp/Makefile	(revision 8348)
++++ crypto/evp/Makefile	(working copy)
+@@ -17,7 +17,7 @@
+ TESTDATA=evptests.txt
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC= encode.c digest.c evp_enc.c evp_key.c evp_acnf.c evp_cnf.c \
+ 	e_des.c e_bf.c e_idea.c e_des3.c e_camellia.c\
+ 	e_rc4.c e_aes.c names.c e_seed.c \
+Index: crypto/dh/Makefile
+===================================================================
+--- crypto/dh/Makefile	(revision 8348)
++++ crypto/dh/Makefile	(working copy)
+@@ -16,7 +16,7 @@
+ TEST= dhtest.c
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC= dh_asn1.c dh_gen.c dh_key.c dh_lib.c dh_check.c dh_err.c dh_depr.c \
+ 	dh_ameth.c dh_pmeth.c dh_prn.c
+ LIBOBJ= dh_asn1.o dh_gen.o dh_key.o dh_lib.o dh_check.o dh_err.o dh_depr.o \
+Index: crypto/asn1/Makefile
+===================================================================
+--- crypto/asn1/Makefile	(revision 8348)
++++ crypto/asn1/Makefile	(working copy)
+@@ -16,7 +16,7 @@
+ TEST=
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC=	a_object.c a_bitstr.c a_utctm.c a_gentm.c a_time.c a_int.c a_octet.c \
+ 	a_print.c a_type.c a_set.c a_dup.c a_d2i_fp.c a_i2d_fp.c \
+ 	a_enum.c a_utf8.c a_sign.c a_digest.c a_verify.c a_mbstr.c a_strex.c \
+@@ -56,11 +56,11 @@
+ 
+ test:	test.c
+ 	cc -g -I../../include -c test.c
+-	cc -g -I../../include -o test test.o -L../.. -lcrypto
++	cc -g -I../../include -o test test.o -L../.. -lsg_crypto
+ 
+ pk:	pk.c
+ 	cc -g -I../../include -c pk.c
+-	cc -g -I../../include -o pk pk.o -L../.. -lcrypto
++	cc -g -I../../include -o pk pk.o -L../.. -lsg_crypto
+ 
+ all:	lib
+ 
+Index: crypto/krb5/Makefile
+===================================================================
+--- crypto/krb5/Makefile	(revision 8348)
++++ crypto/krb5/Makefile	(working copy)
+@@ -16,7 +16,7 @@
+ TEST=
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC= krb5_asn.c
+ 
+ LIBOBJ= krb5_asn.o
+Index: crypto/pqueue/Makefile
+===================================================================
+--- crypto/pqueue/Makefile	(revision 8348)
++++ crypto/pqueue/Makefile	(working copy)
+@@ -16,7 +16,7 @@
+ TEST=
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC=pqueue.c
+ LIBOBJ=pqueue.o
+ 
+Index: crypto/srp/Makefile
+===================================================================
+--- crypto/srp/Makefile	(revision 8348)
++++ crypto/srp/Makefile	(working copy)
+@@ -18,7 +18,7 @@
+ TEST=srptest.c
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC=srp_lib.c srp_vfy.c
+ LIBOBJ=srp_lib.o srp_vfy.o
+ 
+Index: crypto/x509/Makefile
+===================================================================
+--- crypto/x509/Makefile	(revision 8348)
++++ crypto/x509/Makefile	(working copy)
+@@ -16,7 +16,7 @@
+ TEST=
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC=	x509_def.c x509_d2.c x509_r2x.c x509_cmp.c \
+ 	x509_obj.c x509_req.c x509spki.c x509_vfy.c \
+ 	x509_set.c x509cset.c x509rset.c x509_err.c \
+Index: crypto/modes/Makefile
+===================================================================
+--- crypto/modes/Makefile	(revision 8348)
++++ crypto/modes/Makefile	(working copy)
+@@ -20,7 +20,7 @@
+ TEST=
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC= cbc128.c ctr128.c cts128.c cfb128.c ofb128.c gcm128.c \
+ 	ccm128.c xts128.c
+ LIBOBJ= cbc128.o ctr128.o cts128.o cfb128.o ofb128.o gcm128.o \
+Index: crypto/camellia/Makefile
+===================================================================
+--- crypto/camellia/Makefile	(revision 8348)
++++ crypto/camellia/Makefile	(working copy)
+@@ -21,7 +21,7 @@
+ #TEST=camelliatest.c
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC=camellia.c cmll_misc.c cmll_ecb.c cmll_cbc.c cmll_ofb.c \
+ 	   cmll_cfb.c cmll_ctr.c cmll_utl.c
+ 
+Index: crypto/bio/Makefile
+===================================================================
+--- crypto/bio/Makefile	(revision 8348)
++++ crypto/bio/Makefile	(working copy)
+@@ -16,7 +16,7 @@
+ TEST=
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC= bio_lib.c bio_cb.c bio_err.c \
+ 	bss_mem.c bss_null.c bss_fd.c \
+ 	bss_file.c bss_sock.c bss_conn.c \
+Index: crypto/des/Makefile
+===================================================================
+--- crypto/des/Makefile	(revision 8348)
++++ crypto/des/Makefile	(working copy)
+@@ -21,7 +21,7 @@
+ TEST=destest.c
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC=	cbc_cksm.c cbc_enc.c  cfb64enc.c cfb_enc.c  \
+ 	ecb3_enc.c ecb_enc.c  enc_read.c enc_writ.c \
+ 	fcrypt.c ofb64enc.c ofb_enc.c  pcbc_enc.c \
+Index: crypto/pem/Makefile
+===================================================================
+--- crypto/pem/Makefile	(revision 8348)
++++ crypto/pem/Makefile	(working copy)
+@@ -16,7 +16,7 @@
+ TEST=
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC= pem_sign.c pem_seal.c pem_info.c pem_lib.c pem_all.c pem_err.c \
+ 	pem_x509.c pem_xaux.c pem_oth.c pem_pk8.c pem_pkey.c pvkfmt.c
+ 
+Index: crypto/rand/Makefile
+===================================================================
+--- crypto/rand/Makefile	(revision 8348)
++++ crypto/rand/Makefile	(working copy)
+@@ -16,7 +16,7 @@
+ TEST= randtest.c
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC=md_rand.c randfile.c rand_lib.c rand_err.c rand_egd.c \
+ 	rand_win.c rand_unix.c rand_os2.c rand_nw.c
+ LIBOBJ=md_rand.o randfile.o rand_lib.o rand_err.o rand_egd.o \
+Index: crypto/rc2/Makefile
+===================================================================
+--- crypto/rc2/Makefile	(revision 8348)
++++ crypto/rc2/Makefile	(working copy)
+@@ -16,7 +16,7 @@
+ TEST=rc2test.c
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC=rc2_ecb.c rc2_skey.c rc2_cbc.c rc2cfb64.c rc2ofb64.c
+ LIBOBJ=rc2_ecb.o rc2_skey.o rc2_cbc.o rc2cfb64.o rc2ofb64.o
+ 
+Index: crypto/ts/Makefile
+===================================================================
+--- crypto/ts/Makefile	(revision 8348)
++++ crypto/ts/Makefile	(working copy)
+@@ -24,7 +24,7 @@
+ TEST=
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC=	ts_err.c ts_req_utils.c ts_req_print.c ts_rsp_utils.c ts_rsp_print.c \
+ 	ts_rsp_sign.c ts_rsp_verify.c ts_verify_ctx.c ts_lib.c ts_conf.c \
+ 	ts_asn1.c
+Index: crypto/ec/Makefile
+===================================================================
+--- crypto/ec/Makefile	(revision 8348)
++++ crypto/ec/Makefile	(working copy)
+@@ -16,7 +16,7 @@
+ TEST=ectest.c
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC=	ec_lib.c ecp_smpl.c ecp_mont.c ecp_nist.c ec_cvt.c ec_mult.c\
+ 	ec_err.c ec_curve.c ec_check.c ec_print.c ec_asn1.c ec_key.c\
+ 	ec2_smpl.c ec2_mult.c ec_ameth.c ec_pmeth.c eck_prn.c \
+Index: crypto/rc4/Makefile
+===================================================================
+--- crypto/rc4/Makefile	(revision 8348)
++++ crypto/rc4/Makefile	(working copy)
+@@ -20,7 +20,7 @@
+ TEST=rc4test.c
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC=rc4_skey.c rc4_enc.c rc4_utl.c
+ LIBOBJ=$(RC4_ENC) rc4_utl.o
+ 
+Index: crypto/rc5/Makefile
+===================================================================
+--- crypto/rc5/Makefile	(revision 8348)
++++ crypto/rc5/Makefile	(working copy)
+@@ -21,7 +21,7 @@
+ TEST=rc5test.c
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC=rc5_skey.c rc5_ecb.c rc5_enc.c rc5cfb64.c rc5ofb64.c 
+ LIBOBJ=rc5_skey.o rc5_ecb.o $(RC5_ENC) rc5cfb64.o rc5ofb64.o
+ 
+Index: crypto/cast/Makefile
+===================================================================
+--- crypto/cast/Makefile	(revision 8348)
++++ crypto/cast/Makefile	(working copy)
+@@ -21,7 +21,7 @@
+ TEST=casttest.c
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC=c_skey.c c_ecb.c c_enc.c c_cfb64.c c_ofb64.c 
+ LIBOBJ=c_skey.o c_ecb.o $(CAST_ENC) c_cfb64.o c_ofb64.o
+ 
+Index: crypto/ocsp/Makefile
+===================================================================
+--- crypto/ocsp/Makefile	(revision 8348)
++++ crypto/ocsp/Makefile	(working copy)
+@@ -16,7 +16,7 @@
+ TEST=
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC= ocsp_asn.c ocsp_ext.c ocsp_ht.c ocsp_lib.c ocsp_cl.c \
+ 	ocsp_srv.c ocsp_prn.c ocsp_vfy.c ocsp_err.c
+ 
+Index: crypto/whrlpool/Makefile
+===================================================================
+--- crypto/whrlpool/Makefile	(revision 8348)
++++ crypto/whrlpool/Makefile	(working copy)
+@@ -21,7 +21,7 @@
+ TEST=wp_test.c
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC=wp_dgst.c wp_block.c
+ LIBOBJ=wp_dgst.o $(WP_ASM_OBJ)
+ 
+Index: crypto/hmac/Makefile
+===================================================================
+--- crypto/hmac/Makefile	(revision 8348)
++++ crypto/hmac/Makefile	(working copy)
+@@ -16,7 +16,7 @@
+ TEST=hmactest.c
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC=hmac.c hm_ameth.c hm_pmeth.c
+ LIBOBJ=hmac.o hm_ameth.o hm_pmeth.o
+ 
+Index: crypto/sha/Makefile
+===================================================================
+--- crypto/sha/Makefile	(revision 8348)
++++ crypto/sha/Makefile	(working copy)
+@@ -21,7 +21,7 @@
+ TEST=shatest.c sha1test.c sha256t.c sha512t.c
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC=sha_dgst.c sha1dgst.c sha_one.c sha1_one.c sha256.c sha512.c
+ LIBOBJ=sha_dgst.o sha1dgst.o sha_one.o sha1_one.o sha256.o sha512.o $(SHA1_ASM_OBJ)
+ 
+Index: crypto/ui/Makefile
+===================================================================
+--- crypto/ui/Makefile	(revision 8348)
++++ crypto/ui/Makefile	(working copy)
+@@ -20,7 +20,7 @@
+ COMPATSRC= ui_compat.c
+ COMPATOBJ= ui_compat.o
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBSRC= ui_err.c ui_lib.c ui_openssl.c ui_util.c $(COMPATSRC)
+ LIBOBJ= ui_err.o ui_lib.o ui_openssl.o ui_util.o $(COMPATOBJ)
+ 
+Index: include/openssl/e_os.h
+===================================================================
+--- include/openssl/e_os.h	(revision 0)
++++ include/openssl/e_os.h	(revision 8428)
+@@ -0,0 +1 @@
++link ../../e_os.h
+\ No newline at end of file
+
+Property changes on: include/openssl/e_os.h
+___________________________________________________________________
+Added: svn:special
+   + *
+
+Index: engines/Makefile
+===================================================================
+--- engines/Makefile	(revision 8348)
++++ engines/Makefile	(working copy)
+@@ -25,7 +25,7 @@
+ TEST=
+ APPS=
+ 
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ LIBNAMES= 4758cca aep atalla cswift gmp chil nuron sureware ubsec padlock capi
+ 
+ LIBSRC=	e_4758cca.c \
+@@ -78,7 +78,7 @@
+ 		for l in $(LIBNAMES); do \
+ 			$(MAKE) -f ../Makefile.shared -e \
+ 				LIBNAME=$$l LIBEXTRAS=e_$$l.o \
+-				LIBDEPS='-L.. -lcrypto $(EX_LIBS)' \
++				LIBDEPS='-L.. -lsg_crypto $(EX_LIBS)' \
+ 				link_o.$(SHLIB_TARGET); \
+ 		done; \
+ 	else \
+Index: engines/ccgost/Makefile
+===================================================================
+--- engines/ccgost/Makefile	(revision 8348)
++++ engines/ccgost/Makefile	(working copy)
+@@ -6,7 +6,7 @@
+ MAKEFILE= Makefile
+ AR= ar r
+ CFLAGS= $(INCLUDES) $(CFLAG)
+-LIB=$(TOP)/libcrypto.a
++LIB=$(TOP)/libsg_crypto.a
+ 
+ LIBSRC= gost2001.c gost2001_keyx.c gost89.c gost94_keyx.c gost_ameth.c gost_asn1.c gost_crypt.c gost_ctl.c gost_eng.c gosthash.c gost_keywrap.c gost_md.c gost_params.c gost_pmeth.c gost_sign.c
+ 
+@@ -32,7 +32,7 @@
+ 		$(MAKE) -f $(TOP)/Makefile.shared -e \
+ 			LIBNAME=$(LIBNAME) \
+ 			LIBEXTRAS='$(LIBOBJ)' \
+-			LIBDEPS='-L$(TOP) -lcrypto' \
++			LIBDEPS='-L$(TOP) -lsg_crypto' \
+ 			link_o.$(SHLIB_TARGET); \
+ 	else \
+ 		$(AR) $(LIB) $(LIBOBJ); \
+Index: ssl/Makefile
+===================================================================
+--- ssl/Makefile	(revision 8348)
++++ ssl/Makefile	(working copy)
+@@ -18,8 +18,8 @@
+ TEST=ssltest.c
+ APPS=
+ 
+-LIB=$(TOP)/libssl.a
+-SHARED_LIB= libssl$(SHLIB_EXT)
++LIB=$(TOP)/libsg_ssl.a
++SHARED_LIB= libsg_ssl$(SHLIB_EXT)
+ LIBSRC=	\
+ 	s2_meth.c   s2_srvr.c s2_clnt.c  s2_lib.c  s2_enc.c s2_pkt.c \
+ 	s3_meth.c   s3_srvr.c s3_clnt.c  s3_lib.c  s3_enc.c s3_pkt.c s3_both.c s3_cbc.c \

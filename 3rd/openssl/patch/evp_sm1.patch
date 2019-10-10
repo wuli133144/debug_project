@@ -1,0 +1,687 @@
+Index: apps/speed.c
+===================================================================
+--- apps/speed.c	(revision 8923)
++++ apps/speed.c	(working copy)
+@@ -189,6 +189,9 @@
+ #ifndef OPENSSL_NO_ECDH
+ #include <openssl/ecdh.h>
+ #endif
++#ifndef OPENSSL_NO_SM1
++#include <openssl/sm1.h>
++#endif
+ #include <openssl/modes.h>
+ 
+ #ifdef OPENSSL_FIPS
+@@ -239,7 +242,7 @@
+ static int do_multi(int multi);
+ #endif
+ 
+-#define ALGOR_NUM	30
++#define ALGOR_NUM	31
+ #define SIZE_NUM	5
+ #define RSA_NUM		4
+ #define DSA_NUM		3
+@@ -254,7 +257,7 @@
+   "aes-128 cbc","aes-192 cbc","aes-256 cbc",
+   "camellia-128 cbc","camellia-192 cbc","camellia-256 cbc",
+   "evp","sha256","sha512","whirlpool",
+-  "aes-128 ige","aes-192 ige","aes-256 ige","ghash" };
++  "aes-128 ige","aes-192 ige","aes-256 ige","ghash","sm1-128 cbc"};
+ static double results[ALGOR_NUM][SIZE_NUM];
+ static int lengths[SIZE_NUM]={16,64,256,1024,8*1024};
+ #ifndef OPENSSL_NO_RSA
+@@ -422,6 +425,9 @@
+ #ifndef OPENSSL_NO_CAST
+ 	CAST_KEY cast_ks;
+ #endif
++#ifndef OPENSSL_NO_SM1
++       SM1_KEY sm1_ks;
++#endif
+ 	static const unsigned char key16[16]=
+ 		{0x12,0x34,0x56,0x78,0x9a,0xbc,0xde,0xf0,
+ 		 0x34,0x56,0x78,0x9a,0xbc,0xde,0xf0,0x12};
+@@ -498,6 +504,7 @@
+ #define D_IGE_192_AES   27
+ #define D_IGE_256_AES   28
+ #define D_GHASH		29
++#define D_CBC_128_SM1  30
+ 	double d=0.0;
+ 	long c[ALGOR_NUM][SIZE_NUM];
+ #define	R_DSA_512	0
+@@ -1005,6 +1012,10 @@
+ 			}
+ 		else
+ #endif
++#ifndef OPENSSL_NO_SM1
++                       if (strcmp(*argv,"sm1-128-cbc") == 0) doit[D_CBC_128_SM1]=1;
++                else
++#endif
+ 			{
+ 			BIO_printf(bio_err,"Error: bad option or value\n");
+ 			BIO_printf(bio_err,"\n");
+@@ -1068,6 +1079,10 @@
+ #ifndef OPENSSL_NO_DES
+ 			BIO_printf(bio_err,"des-cbc  des-ede3 ");
+ #endif
++#ifndef OPENSSL_NO_sm1
++			BIO_printf(bio_err,"sm1-128-cbc   ");
++			BIO_printf(bio_err,"\n");
++#endif
+ #ifndef OPENSSL_NO_AES
+ 			BIO_printf(bio_err,"aes-128-cbc aes-192-cbc aes-256-cbc ");
+ 			BIO_printf(bio_err,"aes-128-ige aes-192-ige aes-256-ige ");
+@@ -1254,6 +1269,9 @@
+ #ifndef OPENSSL_NO_RSA
+ 	memset(rsa_c,0,sizeof(rsa_c));
+ #endif
++#ifndef OPENSSL_NO_SM1
++       SM1_set_encrypt_key(key16,128,&sm1_ks);
++#endif
+ #ifndef SIGALRM
+ #ifndef OPENSSL_NO_DES
+ 	BIO_printf(bio_err,"First we calculate the approximate speed ...\n");
+@@ -1298,6 +1316,7 @@
+ 	c[D_IGE_192_AES][0]=count;
+ 	c[D_IGE_256_AES][0]=count;
+ 	c[D_GHASH][0]=count;
++	c[D_CBC_128_SM1][0]=count;
+ 
+ 	for (i=1; i<SIZE_NUM; i++)
+ 		{
+@@ -1702,6 +1721,22 @@
+ 			}
+ 		}
+ #endif
++#ifndef OPENSSL_NO_SM1
++       if (doit[D_CBC_128_SM1])
++               {
++               for (j=0; j<SIZE_NUM; j++)
++                       {
++                       print_message(names[D_CBC_128_SM1],c[D_CBC_128_SM1][j],lengths[j]);
++                       Time_F(START);
++                       for (count=0,run=1; COND(c[D_CBC_128_SM1][j]); count++)
++                               SM1_cbc_encrypt(buf,buf,
++                                       (unsigned long)lengths[j],&sm1_ks,
++                                       iv,SM1_ENCRYPT);
++                       d=Time_F(STOP);
++                       print_result(D_CBC_128_SM1,j,count,d);
++                       }
++               }
++#endif
+ #ifndef OPENSSL_NO_AES
+ 	if (doit[D_CBC_128_AES])
+ 		{
+Index: apps/progs.h
+===================================================================
+--- apps/progs.h	(revision 8923)
++++ apps/progs.h	(working copy)
+@@ -172,6 +172,9 @@
+ #ifndef OPENSSL_NO_RMD160
+ 	{FUNC_TYPE_MD,"rmd160",dgst_main},
+ #endif
++#ifndef OPENSSL_NO_SM1
++	{FUNC_TYPE_CIPHER,"sm1-128-cbc",enc_main},
++#endif
+ #ifndef OPENSSL_NO_AES
+ 	{FUNC_TYPE_CIPHER,"aes-128-cbc",enc_main},
+ #endif
+Index: Makefile.compile
+===================================================================
+--- Makefile.compile	(revision 8923)
++++ Makefile.compile	(working copy)
+@@ -149,7 +149,7 @@
+ 	bn ec rsa dsa ecdsa dh ecdh dso engine \
+ 	buffer bio stack lhash rand err \
+ 	evp asn1 pem x509 x509v3 conf txt_db pkcs7 pkcs12 comp ocsp ui krb5 \
+-	cms pqueue ts srp cmac
++	cms pqueue ts srp cmac sm1
+ # keep in mind that the above list is adjusted by ./Configure
+ # according to no-xxx arguments...
+ 
+Index: crypto/objects/obj_mac.h
+===================================================================
+--- crypto/objects/obj_mac.h	(revision 8923)
++++ crypto/objects/obj_mac.h	(working copy)
+@@ -133,6 +133,11 @@
+ #define NID_clearance		395
+ #define OBJ_clearance		OBJ_selected_attribute_types,55L
+ 
++#define SN_ISO_CN		"ISO-CN"
++#define LN_ISO_CN		"ISO CN Member Body"
++#define NID_ISO_CN		920
++#define OBJ_ISO_CN		OBJ_member_body,156L
++
+ #define SN_ISO_US		"ISO-US"
+ #define LN_ISO_US		"ISO US Member Body"
+ #define NID_ISO_US		183
+@@ -511,6 +516,11 @@
+ #define NID_wap_wsg_idm_ecid_wtls12		745
+ #define OBJ_wap_wsg_idm_ecid_wtls12		OBJ_wap_wsg_idm_ecid,12L
+ 
++#define SN_CN_GMJ		"CN-GMJ"
++#define LN_CN_GMJ		"CN GMJ algorithm"
++#define NID_CN_GMJ		921
++#define OBJ_CN_GMJ		OBJ_ISO_CN,197L
++
+ #define SN_cast5_cbc		"CAST5-CBC"
+ #define LN_cast5_cbc		"cast5-cbc"
+ #define NID_cast5_cbc		108
+@@ -2584,6 +2594,13 @@
+ #define NID_zlib_compression		125
+ #define OBJ_zlib_compression		OBJ_id_smime_alg,8L
+ 
++#define OBJ_gm_alg		OBJ_CN_GMJ,1L
++
++#define SN_sm1_128_cbc		"SM1-128-CBC"
++#define LN_sm1_128_cbc		"sm1-128-cbc"
++#define NID_sm1_128_cbc		922
++#define OBJ_sm1_128_cbc		OBJ_gm_alg,102L
++
+ #define OBJ_csor		2L,16L,840L,1L,101L,3L
+ 
+ #define OBJ_nistAlgorithms		OBJ_csor,4L
+Index: crypto/objects/obj_mac.num
+===================================================================
+--- crypto/objects/obj_mac.num	(revision 8923)
++++ crypto/objects/obj_mac.num	(working copy)
+@@ -917,3 +917,6 @@
+ aes_192_cbc_hmac_sha1		917
+ aes_256_cbc_hmac_sha1		918
+ rsaesOaep		919
++ISO_CN		920
++CN_GMJ		921
++sm1_128_cbc		922
+Index: crypto/objects/obj_dat.h
+===================================================================
+--- crypto/objects/obj_dat.h	(revision 8923)
++++ crypto/objects/obj_dat.h	(working copy)
+@@ -62,12 +62,12 @@
+  * [including the GNU Public Licence.]
+  */
+ 
+-#define NUM_NID 920
+-#define NUM_SN 913
+-#define NUM_LN 913
+-#define NUM_OBJ 857
++#define NUM_NID 923
++#define NUM_SN 916
++#define NUM_LN 916
++#define NUM_OBJ 860
+ 
+-static const unsigned char lvalues[5980]={
++static const unsigned char lvalues[5995]={
+ 0x00,                                        /* [  0] OBJ_undef */
+ 0x2A,0x86,0x48,0x86,0xF7,0x0D,               /* [  1] OBJ_rsadsi */
+ 0x2A,0x86,0x48,0x86,0xF7,0x0D,0x01,          /* [  7] OBJ_pkcs */
+@@ -925,6 +925,9 @@
+ 0x2A,0x86,0x48,0x86,0xF7,0x0D,0x01,0x01,0x08,/* [5952] OBJ_mgf1 */
+ 0x2A,0x86,0x48,0x86,0xF7,0x0D,0x01,0x01,0x0A,/* [5961] OBJ_rsassaPss */
+ 0x2A,0x86,0x48,0x86,0xF7,0x0D,0x01,0x01,0x07,/* [5970] OBJ_rsaesOaep */
++0x2A,0x81,0x1C,                              /* [5979] OBJ_ISO_CN */
++0x2A,0x81,0x1C,0x81,0x45,                    /* [5982] OBJ_CN_GMJ */
++0x2A,0x81,0x1C,0x81,0x45,0x01,0x66,          /* [5987] OBJ_sm1_128_cbc */
+ };
+ 
+ static const ASN1_OBJECT nid_objs[NUM_NID]={
+@@ -2406,6 +2409,9 @@
+ {"AES-256-CBC-HMAC-SHA1","aes-256-cbc-hmac-sha1",
+ 	NID_aes_256_cbc_hmac_sha1,0,NULL,0},
+ {"RSAES-OAEP","rsaesOaep",NID_rsaesOaep,9,&(lvalues[5970]),0},
++{"ISO-CN","ISO CN Member Body",NID_ISO_CN,3,&(lvalues[5979]),0},
++{"CN-GMJ","CN GMJ algorithm",NID_CN_GMJ,5,&(lvalues[5982]),0},
++{"SM1-128-CBC","sm1-128-cbc",NID_sm1_128_cbc,7,&(lvalues[5987]),0},
+ };
+ 
+ static const unsigned int sn_objs[NUM_SN]={
+@@ -2465,6 +2471,7 @@
+ 111,	/* "CAST5-OFB" */
+ 894,	/* "CMAC" */
+ 13,	/* "CN" */
++921,	/* "CN-GMJ" */
+ 141,	/* "CRLReason" */
+ 417,	/* "CSPName" */
+ 367,	/* "CrlID" */
+@@ -2504,6 +2511,7 @@
+ 36,	/* "IDEA-ECB" */
+ 46,	/* "IDEA-OFB" */
+ 181,	/* "ISO" */
++920,	/* "ISO-CN" */
+ 183,	/* "ISO-US" */
+ 645,	/* "ITU-T" */
+ 646,	/* "JOINT-ISO-ITU-T" */
+@@ -2585,6 +2593,7 @@
+ 672,	/* "SHA256" */
+ 673,	/* "SHA384" */
+ 674,	/* "SHA512" */
++922,	/* "SM1-128-CBC" */
+ 188,	/* "SMIME" */
+ 167,	/* "SMIME-CAPS" */
+ 100,	/* "SN" */
+@@ -3335,6 +3344,7 @@
+ 285,	/* "Biometric Info" */
+ 179,	/* "CA Issuers" */
+ 785,	/* "CA Repository" */
++921,	/* "CN GMJ algorithm" */
+ 131,	/* "Code Signing" */
+ 783,	/* "Diffie-Hellman based MAC" */
+ 382,	/* "Directory" */
+@@ -3369,6 +3379,7 @@
+ 294,	/* "IPSec End System" */
+ 295,	/* "IPSec Tunnel" */
+ 296,	/* "IPSec User" */
++920,	/* "ISO CN Member Body" */
+ 182,	/* "ISO Member Body" */
+ 183,	/* "ISO US Member Body" */
+ 667,	/* "Independent" */
+@@ -4195,6 +4206,7 @@
+ 52,	/* "signingTime" */
+ 454,	/* "simpleSecurityObject" */
+ 496,	/* "singleLevelQuality" */
++922,	/* "sm1-128-cbc" */
+ 16,	/* "stateOrProvinceName" */
+ 660,	/* "streetAddress" */
+ 498,	/* "subtreeMaximumQuality" */
+@@ -4260,6 +4272,7 @@
+ 512,	/* OBJ_id_set                       2 23 42 */
+ 678,	/* OBJ_wap                          2 23 43 */
+ 435,	/* OBJ_pss                          0 9 2342 */
++920,	/* OBJ_ISO_CN                       1 2 156 */
+ 183,	/* OBJ_ISO_US                       1 2 840 */
+ 381,	/* OBJ_iana                         1 3 6 1 */
+ 677,	/* OBJ_certicom_arc                 1 3 132 */
+@@ -4475,6 +4488,7 @@
+ 637,	/* OBJ_set_brand_Diners             2 23 42 8 30 */
+ 638,	/* OBJ_set_brand_AmericanExpress    2 23 42 8 34 */
+ 639,	/* OBJ_set_brand_JCB                2 23 42 8 35 */
++921,	/* OBJ_CN_GMJ                       1 2 156 197 */
+ 805,	/* OBJ_cryptopro                    1 2 643 2 2 */
+ 806,	/* OBJ_cryptocom                    1 2 643 2 9 */
+ 184,	/* OBJ_X9_57                        1 2 840 10040 */
+@@ -4573,6 +4587,7 @@
+ 634,	/* OBJ_setAttr_TokICCsig            2 23 42 3 3 5 1 */
+ 635,	/* OBJ_setAttr_SecDevSig            2 23 42 3 3 5 2 */
+ 436,	/* OBJ_ucl                          0 9 2342 19200300 */
++922,	/* OBJ_sm1_128_cbc                  1 2 156 197 1 102 */
+ 820,	/* OBJ_id_Gost28147_89_None_KeyMeshing 1 2 643 2 2 14 0 */
+ 819,	/* OBJ_id_Gost28147_89_CryptoPro_KeyMeshing 1 2 643 2 2 14 1 */
+ 845,	/* OBJ_id_GostR3410_94_a            1 2 643 2 2 20 1 */
+Index: crypto/objects/objects.txt
+===================================================================
+--- crypto/objects/objects.txt	(revision 8923)
++++ crypto/objects/objects.txt	(working copy)
+@@ -26,6 +26,9 @@
+ 
+ selected-attribute-types 55	: clearance
+ 
++# add cn OID
++member-body 156		: ISO-CN		: ISO CN Member Body
++
+ member-body 840		: ISO-US		: ISO US Member Body
+ ISO-US 10040		: X9-57			: X9.57
+ X9-57 4			: X9cm			: X9.57 CM ?
+@@ -141,6 +144,8 @@
+ wap-wsg-idm-ecid 11	: wap-wsg-idm-ecid-wtls11
+ wap-wsg-idm-ecid 12	: wap-wsg-idm-ecid-wtls12
+ 
++# add gmj
++ISO-CN 197		: CN-GMJ		: CN GMJ algorithm
+ 
+ ISO-US 113533 7 66 10	: CAST5-CBC		: cast5-cbc
+ 			: CAST5-ECB		: cast5-ecb
+@@ -843,6 +848,10 @@
+ !Cname zlib-compression
+ id-smime-alg 8		: ZLIB			: zlib compression
+ 
++# GMJ Algorithms
++!Alias gm-alg	CN-GMJ 1
++gm-alg 102	: SM1-128-CBC	: sm1-128-cbc
++
+ # AES aka Rijndael
+ 
+ !Alias csor 2 16 840 1 101 3
+Index: crypto/evp/Makefile
+===================================================================
+--- crypto/evp/Makefile	(revision 8923)
++++ crypto/evp/Makefile	(working copy)
+@@ -29,7 +29,7 @@
+ 	c_all.c c_allc.c c_alld.c evp_lib.c bio_ok.c \
+ 	evp_pkey.c evp_pbe.c p5_crpt.c p5_crpt2.c \
+ 	e_old.c pmeth_lib.c pmeth_fn.c pmeth_gn.c m_sigver.c evp_fips.c	\
+-	e_aes_cbc_hmac_sha1.c e_rc4_hmac_md5.c
++	e_aes_cbc_hmac_sha1.c e_rc4_hmac_md5.c e_sm1.c
+ 
+ LIBOBJ=	encode.o digest.o evp_enc.o evp_key.o evp_acnf.o evp_cnf.o \
+ 	e_des.o e_bf.o e_idea.o e_des3.o e_camellia.o\
+@@ -42,7 +42,7 @@
+ 	c_all.o c_allc.o c_alld.o evp_lib.o bio_ok.o \
+ 	evp_pkey.o evp_pbe.o p5_crpt.o p5_crpt2.o \
+ 	e_old.o pmeth_lib.o pmeth_fn.o pmeth_gn.o m_sigver.o evp_fips.o \
+-	e_aes_cbc_hmac_sha1.o e_rc4_hmac_md5.o
++	e_aes_cbc_hmac_sha1.o e_rc4_hmac_md5.o e_sm1.o
+ 
+ SRC= $(LIBSRC)
+ 
+@@ -774,3 +774,13 @@
+ pmeth_lib.o: ../../include/openssl/symhacks.h ../../include/openssl/x509.h
+ pmeth_lib.o: ../../include/openssl/x509_vfy.h ../asn1/asn1_locl.h ../cryptlib.h
+ pmeth_lib.o: evp_locl.h pmeth_lib.c
++e_aes.o: ../../include/openssl/sm1.h ../../include/openssl/asn1.h
++e_aes.o: ../../include/openssl/bio.h ../../include/openssl/crypto.h
++e_aes.o: ../../include/openssl/e_os2.h ../../include/openssl/err.h
++e_aes.o: ../../include/openssl/evp.h ../../include/openssl/lhash.h
++e_aes.o: ../../include/openssl/modes.h ../../include/openssl/obj_mac.h
++e_aes.o: ../../include/openssl/objects.h ../../include/openssl/opensslconf.h
++e_aes.o: ../../include/openssl/opensslv.h ../../include/openssl/ossl_typ.h
++e_aes.o: ../../include/openssl/rand.h ../../include/openssl/safestack.h
++e_aes.o: ../../include/openssl/stack.h ../../include/openssl/symhacks.h
++e_aes.o: ../modes/modes_lcl.h e_sm1.c evp_locl.h
+Index: crypto/evp/evp.h
+===================================================================
+--- crypto/evp/evp.h	(revision 8923)
++++ crypto/evp/evp.h	(working copy)
+@@ -849,6 +849,10 @@
+ const EVP_CIPHER *EVP_seed_ofb(void);
+ #endif
+ 
++#ifndef OPENSSL_NO_SM1
++const EVP_CIPHER *EVP_sm1_128_cbc(void);
++#endif
++
+ void OPENSSL_add_all_algorithms_noconf(void);
+ void OPENSSL_add_all_algorithms_conf(void);
+ 
+Index: crypto/evp/e_sm1.c
+===================================================================
+--- crypto/evp/e_sm1.c	(revision 0)
++++ crypto/evp/e_sm1.c	(revision 0)
+@@ -0,0 +1,51 @@
++/* crypto/evp/e_sm1.c */
++/* add by fanjc
++ */
++
++#include <stdio.h>
++#include "cryptlib.h"
++#ifndef OPENSSL_NO_SM1
++#include <openssl/evp.h>
++#include <openssl/objects.h>
++#include "evp_locl.h"
++#include <openssl/sm1.h>
++
++static int sm1_init_key(EVP_CIPHER_CTX *ctx, const unsigned char *key,
++			const unsigned char *iv, int enc);
++static int sm1_ctrl(EVP_CIPHER_CTX *c, int type, int arg, void *ptr);
++
++static int sm1_128_cbc_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out,
++			  const unsigned char *in, size_t inl)
++{
++	SM1_cbc_encrypt(in, out, inl, ctx->cipher_data, ctx->iv, ctx->encrypt);
++	return 1;
++}
++
++BLOCK_CIPHER_def_cbc(sm1_128,SM1_KEY,NID_sm1_128,16,16,16,
++		     0, sm1_init_key,NULL,
++		     NULL,
++		     NULL,sm1_ctrl)
++
++static int sm1_init_key(EVP_CIPHER_CTX *ctx, const unsigned char *key,
++			const unsigned char *iv, int enc)
++	{
++	int ret;
++	if (enc) {
++		ret=SM1_set_encrypt_key(key, ctx->key_len * 8, ctx->cipher_data); 
++	} else {
++		ret=SM1_set_decrypt_key(key, ctx->key_len * 8, ctx->cipher_data); 
++	}
++	memcpy(ctx->iv, iv, SM1_IV_SIZE);
++	if(ret != 0)
++		{
++		return 0;
++		}
++	return 1;
++	}
++
++static int sm1_ctrl(EVP_CIPHER_CTX *c, int type, int arg, void *ptr)
++	{
++	return 1;
++	}
++
++#endif
+
+Property changes on: crypto/evp/e_sm1.c
+___________________________________________________________________
+Added: svn:executable
+   + *
+
+Index: crypto/evp/c_allc.c
+===================================================================
+--- crypto/evp/c_allc.c	(revision 8923)
++++ crypto/evp/c_allc.c	(working copy)
+@@ -227,4 +227,8 @@
+ 	EVP_add_cipher_alias(SN_camellia_256_cbc,"CAMELLIA256");
+ 	EVP_add_cipher_alias(SN_camellia_256_cbc,"camellia256");
+ #endif
++
++#ifndef OPENSSL_NO_SM1
++ 	EVP_add_cipher(EVP_sm1_128_cbc());
++#endif
+ 	}
+Index: crypto/sm1/sm1.h
+===================================================================
+--- crypto/sm1/sm1.h	(revision 0)
++++ crypto/sm1/sm1.h	(revision 0)
+@@ -0,0 +1,49 @@
++/* crypto/sm1/sm1.h -*- mode:C; c-file-style: "eay" -*- */
++/* ====================================================================
++ *  * add by fanjc
++ *   *
++ *    */
++
++#ifndef HEADER_SM1_H
++#define HEADER_SM1_H
++
++#include <openssl/opensslconf.h>
++
++#ifdef OPENSSL_NO_SM1
++#error SM1 is disabled.
++#endif
++
++#include <stddef.h>
++
++#define SM1_ENCRYPT		1
++#define SM1_DECRYPT		0
++
++#define SM1_BLOCK_SIZE	16
++#define SM1_IV_SIZE		16
++
++#ifdef  __cplusplus
++extern "C" {
++#endif
++
++	/* This should be a hidden type, but EVP requires that the size be known */
++	struct sm1_key_st {
++			void* sm1_handle;
++	};
++	typedef struct sm1_key_st SM1_KEY;
++
++	int SM1_set_encrypt_key(const unsigned char *userKey, const int bits,
++				SM1_KEY *key);
++	int SM1_set_decrypt_key(const unsigned char *userKey, const int bits,
++				SM1_KEY *key);
++
++	void SM1_cbc_encrypt(const unsigned char *in, unsigned char *out,
++			    size_t length, const SM1_KEY *key,
++				    unsigned char *ivec, const int enc);
++
++
++#ifdef  __cplusplus
++}
++#endif
++
++#endif /* !HEADER_SM1_H */
++
+
+Property changes on: crypto/sm1/sm1.h
+___________________________________________________________________
+Added: svn:executable
+   + *
+
+Index: crypto/sm1/sm1_core.c
+===================================================================
+--- crypto/sm1/sm1_core.c	(revision 0)
++++ crypto/sm1/sm1_core.c	(revision 0)
+@@ -0,0 +1,31 @@
++/* crypto/sm1/sm1_core.c */
++/* 
++ */
++
++#include <assert.h>
++
++#include <stdio.h>
++#include <string.h>
++#include <stdlib.h>
++#include <openssl/sm1.h>
++
++int SM1_set_encrypt_key(const unsigned char *userKey, const int bits,
++	SM1_KEY *key)
++{
++//	printf("SM1_set_encrypt_key\n");
++	return 0;
++}
++int SM1_set_decrypt_key(const unsigned char *userKey, const int bits,
++	SM1_KEY *key)
++{
++//	printf("SM1_set_decrypt_key\n");
++	return 0;
++}
++
++void SM1_cbc_encrypt(const unsigned char *in, unsigned char *out,
++    size_t length, const SM1_KEY *key,
++    unsigned char *ivec, const int enc)
++{
++	memmove(out, in, length);
++//	printf("SM1_cbc_encrypt\n");
++}
+
+Property changes on: crypto/sm1/sm1_core.c
+___________________________________________________________________
+Added: svn:executable
+   + *
+
+Index: crypto/sm1/Makefile
+===================================================================
+--- crypto/sm1/Makefile	(revision 0)
++++ crypto/sm1/Makefile	(revision 0)
+@@ -0,0 +1,94 @@
++#
++# OpenSSL/crypto/sm1/Makefile
++#
++
++DIR=	sm1
++TOP=	../..
++CC=	cc
++CPP=	$(CC) -E
++INCLUDES=-I$(TOP) -I../../include
++CFLAG=-g
++MAKEFILE=	Makefile
++AR=		ar r
++RANLIB=		ranlib
++DES_ENC=	sm1_core.o 
++
++CFLAGS= $(INCLUDES) $(CFLAG)
++ASFLAGS= $(INCLUDES) $(ASFLAG)
++AFLAGS= $(ASFLAGS)
++
++GENERAL=Makefile
++#TEST=sm1test.c
++APPS=
++
++LIB=$(TOP)/libsg_crypto.a
++LIBSRC=sm1_core.c
++
++LIBOBJ= sm1_core.o
++
++SRC= $(LIBSRC)
++
++EXHEADER= sm1.h
++HEADER=	$(EXHEADER)
++
++ALL=    $(GENERAL) $(SRC) $(HEADER)
++
++top:
++	(cd ../..; $(MAKE) DIRS=crypto SDIRS=$(DIR) sub_all)
++
++all:	lib
++
++lib:	$(LIBOBJ)
++	$(AR) $(LIB) $(LIBOBJ)
++	$(RANLIB) $(LIB) || echo Never mind.
++	@touch lib
++
++# sm1: sm1test.o lib
++#	$(CC) $(CFLAGS) -o sm1 sm1test.o $(LIB)
++
++files:
++	$(PERL) $(TOP)/util/files.pl Makefile >> $(TOP)/MINFO
++
++links:
++	@$(PERL) $(TOP)/util/mklink.pl ../../include/openssl $(EXHEADER)
++	@$(PERL) $(TOP)/util/mklink.pl ../../test $(TEST)
++	@$(PERL) $(TOP)/util/mklink.pl ../../apps $(APPS)
++
++# We need to use force because 'install' matches 'INSTALL' on case
++# insensitive systems
++FRC.install:
++install: FRC.install
++	@[ -n "$(INSTALLTOP)" ] # should be set by top Makefile...
++	@headerlist="$(EXHEADER)"; for i in $$headerlist ; \
++	do  \
++	(cp $$i $(INSTALL_PREFIX)$(INSTALLTOP)/include/openssl/$$i; \
++	chmod 644 $(INSTALL_PREFIX)$(INSTALLTOP)/include/openssl/$$i ); \
++	done;
++
++tags:
++	ctags $(SRC)
++
++tests:
++
++lint:
++	lint -DLINT $(INCLUDES) $(SRC)>fluff
++
++depend:
++	@[ -n "$(MAKEDEPEND)" ] # should be set by upper Makefile...
++	$(MAKEDEPEND) -- $(CFLAG) $(INCLUDES) $(DEPFLAG) -- $(PROGS) $(LIBSRC)
++
++dclean:
++	$(PERL) -pe 'if (/^# DO NOT DELETE THIS LINE/) {print; exit(0);}' $(MAKEFILE) >Makefile.new
++	mv -f Makefile.new $(MAKEFILE)
++
++clean:
++	rm -f *.s *.o *.obj des lib tags core .pure .nfs* *.old *.bak fluff
++
++# DO NOT DELETE THIS LINE -- make depend depends on it.
++
++sm1_core.o: ../../include/openssl/sm1.h 
++sm1_core.o: ../../include/openssl/e_os2.h ../../include/openssl/opensslconf.h
++sm1_core.o: ../../include/openssl/ossl_typ.h ../../include/openssl/safestack.h
++sm1_core.o: ../../include/openssl/stack.h ../../include/openssl/symhacks.h
++sm1_core.o: ../../include/openssl/ui.h ../../include/openssl/ui_compat.h
++sm1_core.o: sm1_core.c 
+
+Property changes on: crypto/sm1/Makefile
+___________________________________________________________________
+Added: svn:executable
+   + *
+
+Index: include/openssl/sm1.h
+===================================================================
+--- include/openssl/sm1.h	(revision 0)
++++ include/openssl/sm1.h	(revision 0)
+@@ -0,0 +1 @@
++link ../../crypto/sm1/sm1.h
+\ No newline at end of file
+
+Property changes on: include/openssl/sm1.h
+___________________________________________________________________
+Added: svn:special
+   + *
+

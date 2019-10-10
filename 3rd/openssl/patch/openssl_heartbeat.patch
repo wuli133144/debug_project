@@ -1,0 +1,32 @@
+Index: Makefile.compile
+===================================================================
+--- Makefile.compile	(revision 17063)
++++ Makefile.compile	(working copy)
+@@ -13,8 +13,8 @@
+ SHLIB_MINOR=0.0
+ SHLIB_EXT=.so.$(SHLIB_MAJOR).$(SHLIB_MINOR)
+ PLATFORM=linux-x86_64
+-OPTIONS=enable-shared -Wa,--noexecstack no-ec_nistp_64_gcc_128 no-gmp no-jpake no-krb5 no-md2 no-rc5 no-rfc3779 no-sctp no-store no-zlib no-zlib-dynamic no-static-engine
+-CONFIGURE_ARGS=linux-x86_64 shared -Wa,--noexecstack
++OPTIONS=enable-shared -DOPENSSL_NO_HEARTBEATS -Wa,--noexecstack no-ec_nistp_64_gcc_128 no-gmp no-jpake no-krb5 no-md2 no-rc5 no-rfc3779 no-sctp no-store no-zlib no-zlib-dynamic no-static-engine
++CONFIGURE_ARGS=linux-x86_64 shared -DOPENSSL_NO_HEARTBEATS -Wa,--noexecstack
+ SHLIB_TARGET=linux-shared
+ 
+ # HERE indicates where this Makefile lives.  This can be used to indicate
+Index: ssl/t1_lib.c
+===================================================================
+--- ssl/t1_lib.c	(revision 17063)
++++ ssl/t1_lib.c	(working copy)
+@@ -2487,8 +2487,12 @@
+ 	unsigned int padding = 16; /* Use minimum padding */
+ 
+ 	/* Read type and payload length first */
++	if (1 + 2 + 16 > s->s3->rrec.length)
++		return 0; /* silently discard */
+ 	hbtype = *p++;
+ 	n2s(p, payload);
++	if (1 + 2 + payload + 16 > s->s3->rrec.length)
++		return 0; /* silently discard per RFC 6520 sec. 4 */
+ 	pl = p;
+ 
+ 	if (s->msg_callback)

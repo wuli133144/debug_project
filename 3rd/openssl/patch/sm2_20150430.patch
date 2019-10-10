@@ -1,0 +1,3502 @@
+Index: openssl-1.0.1e/apps/speed.c
+===================================================================
+--- openssl-1.0.1e/apps/speed.c	(revision 22741)
++++ openssl-1.0.1e/apps/speed.c	(working copy)
+@@ -192,6 +192,9 @@
+ #ifndef OPENSSL_NO_ECDH
+ #include <openssl/ecdh.h>
+ #endif
++#ifndef OPENSSL_NO_SM2
++#include <openssl/sm2.h>
++#endif
+ #ifndef OPENSSL_NO_SM1
+ #include <openssl/sm1.h>
+ #endif
+@@ -252,6 +255,7 @@
+ #define SIZE_NUM	5
+ #define RSA_NUM		4
+ #define DSA_NUM		3
++#define SM2_NUM		1
+ 
+ #define EC_NUM       16
+ #define MAX_ECDH_SIZE 256
+@@ -279,6 +283,9 @@
+ #ifndef OPENSSL_NO_ECDH
+ static double ecdh_results[EC_NUM][1];
+ #endif
++#ifndef OPENSSL_NO_SM2
++static double sm2_results[SM2_NUM][4];
++#endif
+ 
+ #if defined(OPENSSL_NO_DSA) && !(defined(OPENSSL_NO_ECDSA) && defined(OPENSSL_NO_ECDH))
+ static const char rnd_seed[] = "string to make the random number generator think it has entropy";
+@@ -548,6 +555,8 @@
+ #define R_EC_B409    14
+ #define R_EC_B571    15
+ 
++#define R_SM2_256    0
++
+ #ifndef OPENSSL_NO_RSA
+ 	RSA *rsa_key[RSA_NUM];
+ 	long rsa_c[RSA_NUM][2];
+@@ -644,6 +653,21 @@
+ #ifndef OPENSSL_NO_ECDH
+         int ecdh_doit[EC_NUM];
+ #endif
++	
++#ifndef OPENSSL_NO_SM2
++	static unsigned int sm2_curves[SM2_NUM] = { \
++		NID_sm2, \
++	};
++	static int sm2_curves_bits[SM2_NUM] = { \
++		256, \
++	};
++	long sm2_count;
++	unsigned char sm2sig[256], sm2crpt[129];
++	unsigned int sm2siglen, sm2crpten;
++	EC_KEY *sm2[SM2_NUM];
++	long sm2_c[SM2_NUM][4];
++	int sm2_doit[SM2_NUM];
++#endif
+ 	int doit[ALGOR_NUM];
+ 	int pr_header=0;
+ 	const EVP_CIPHER *evp_cipher=NULL;
+@@ -672,6 +696,9 @@
+ 		ecdh_b[i] = NULL;
+ 		}
+ #endif
++#ifndef OPENSSL_NO_SM2
++	for (i=0; i<SM2_NUM; i++) sm2[i] = NULL;
++#endif
+ 
+ 
+ 	if (bio_err == NULL)
+@@ -716,6 +743,10 @@
+ 	for (i=0; i<EC_NUM; i++)
+ 		ecdh_doit[i]=0;
+ #endif
++#ifndef OPENSSL_NO_SM2
++	for (i=0; i<SM2_NUM; i++)
++		sm2_doit[i]=0;
++#endif
+ 
+ 	
+ 	j=0;
+@@ -1040,6 +1071,10 @@
+ 			if (strcmp(*argv,"sm3") == 0) doit[D_SM3]=1;
+ 		else
+ #endif 
++#ifndef OPENSSL_NO_SM2
++			 if (strcmp(*argv,"sm2") == 0) sm2_doit[R_SM2_256]=2;
++		 else
++#endif
+ #ifndef OPENSSL_NO_SM4
+ 			if (strcmp(*argv,"sm4-128-cbc") == 0) doit[D_CBC_128_SM4]=1;
+ 		else
+@@ -1150,6 +1185,9 @@
+ 			BIO_printf(bio_err,"ecdhb163  ecdhb233  ecdhb283  ecdhb409  ecdhb571\n");
+ 			BIO_printf(bio_err,"ecdh\n");
+ #endif
++#ifndef OPENSSL_NO_SM2
++			BIO_printf(bio_err,"sm2\n");
++#endif
+ 
+ #ifndef OPENSSL_NO_IDEA
+ 			BIO_printf(bio_err,"idea     ");
+@@ -1227,6 +1265,10 @@
+ 		for (i=0; i<EC_NUM; i++)
+ 			ecdh_doit[i]=1;
+ #endif
++#ifndef OPENSSL_NO_SM2
++		for (i=0; i<SM2_NUM; i++)
++			sm2_doit[i]=1;
++#endif
+ 		}
+ 	for (i=0; i<ALGOR_NUM; i++)
+ 		if (doit[i]) pr_header++;
+@@ -1543,6 +1585,11 @@
+ 		}
+ #endif
+ 
++#ifndef OPENSSL_NO_SM2
++	sm2_c[R_SM2_256][0]=count/1000;
++	sm2_c[R_SM2_256][1]=count/1000/2;
++#endif
++
+ #define COND(d)	(count < (d))
+ #define COUNT(d) (d)
+ #else
+@@ -2495,6 +2542,179 @@
+ 		}
+ 	if (rnd_fake) RAND_cleanup();
+ #endif
++
++#ifndef OPENSSL_NO_SM2
++	if (RAND_status() != 1) 
++		{
++		RAND_seed(rnd_seed, sizeof rnd_seed);
++		rnd_fake = 1;
++		}
++	for (j=0; j<SM2_NUM; j++) 
++		{
++		int ret;
++
++		if (!sm2_doit[j]) continue; /* Ignore Curve */ 
++		sm2[j] = EC_KEY_new_by_curve_name(sm2_curves[j]);
++		if (sm2[j] == NULL) 
++			{
++			BIO_printf(bio_err,"SM2 failure.\n");
++			ERR_print_errors(bio_err);
++			sm2_count=1;
++			} 
++		else 
++			{
++#if 1
++			EC_KEY_precompute_mult(sm2[j], NULL);
++#endif
++			/* Perform SM2 signature test */
++			EC_KEY_generate_key(sm2[j]);
++			ret = SM2_sign(0, buf, 20, sm2sig, 
++				&sm2siglen, sm2[j]);
++			if (ret == 0) 
++				{
++				BIO_printf(bio_err,"SM2 sign failure.  No SM2 sign will be done.\n");
++				ERR_print_errors(bio_err);
++				sm2_count=1;
++				} 
++			else 
++				{
++				pkey_print_message("sign","sm2",
++					sm2_c[j][0], sm2_curves_bits[j], ECDSA_SECONDS);
++
++				Time_F(START);
++				for (count=0,run=1; COND(sm2_c[j][0]);
++					count++) 
++					{
++					ret=SM2_sign(0, buf, 20, 
++						sm2sig, &sm2siglen,
++						sm2[j]);
++					if (ret == 0) 
++						{
++						BIO_printf(bio_err, "SM2 sign failure\n");
++						ERR_print_errors(bio_err);
++						count=1;
++						break;
++						}
++					}
++				d=Time_F(STOP);
++
++				BIO_printf(bio_err, mr ? "+R6:%ld:%d:%.2f\n" :
++					"%ld %d bit SM2 signs in %.2fs \n", 
++					count, sm2_curves_bits[j], d);
++				sm2_results[j][0]=d/(double)count;
++				sm2_count=count;
++				}
++
++			/* Perform SM2 verification test */
++			ret=SM2_verify(0, buf, 20, sm2sig, 
++				sm2siglen, sm2[j]);
++			if (ret != 1) 
++				{
++				BIO_printf(bio_err,"SM2 verify failure.  No SM2 verify will be done.\n");
++				ERR_print_errors(bio_err);
++				sm2_doit[j] = 0;
++				} 
++			else 
++				{
++				pkey_print_message("verify","sm2",
++				sm2_c[j][1],
++				sm2_curves_bits[j],
++				ECDSA_SECONDS);
++				Time_F(START);
++				for (count=0,run=1; COND(sm2_c[j][1]); count++) 
++					{
++					ret=SM2_verify(0, buf, 20, sm2sig, sm2siglen, sm2[j]);
++					if (ret != 1) 
++						{
++						BIO_printf(bio_err, "SM2 verify failure\n");
++						ERR_print_errors(bio_err);
++						count=1;
++						break;
++						}
++					}
++				d=Time_F(STOP);
++				BIO_printf(bio_err, mr? "+R6:%ld:%d:%.2f\n"
++						: "%ld %d bit SM2 verify in %.2fs\n",
++				count, sm2_curves_bits[j], d);
++				sm2_results[j][1]=d/(double)count;
++				}
++
++			/* Perform SM2 encrypt test */
++			sm2crpten=SM2_encrypt(20, buf, sm2crpt, sm2[j]);
++			if (sm2crpten <= 0) 
++				{
++				BIO_printf(bio_err,"SM2 encrypt failure.  No SM2 encrypt will be done.\n");
++				ERR_print_errors(bio_err);
++				sm2_doit[j] = 0;
++				} 
++			else 
++				{
++				pkey_print_message("encrypt","sm2",
++				sm2_c[j][2],
++				sm2_curves_bits[j],
++				ECDSA_SECONDS);
++				Time_F(START);
++				for (count=0,run=1; COND(sm2_c[j][2]); count++) 
++					{
++					sm2crpten=SM2_encrypt(20, buf, sm2crpt, sm2[j]);
++					if (sm2crpten <= 0) 
++						{
++						BIO_printf(bio_err, "SM2 encrypt failure\n");
++						ERR_print_errors(bio_err);
++						count=1;
++						break;
++						}
++					}
++				d=Time_F(STOP);
++				BIO_printf(bio_err, mr? "+R6:%ld:%d:%.2f\n"
++						: "%ld %d bit SM2 encrypt in %.2fs\n",
++						count, sm2_curves_bits[j], d);
++				sm2_results[j][2]=d/(double)count;
++				}
++
++			/* Perform SM2 decrypt test */
++			ret=SM2_decrypt(sm2crpten, sm2crpt, sm2sig, sm2[j]);
++			if (ret <= 0) 
++				{
++				BIO_printf(bio_err,"SM2 decrypt failure.  No SM2 decrypt will be done.\n");
++				ERR_print_errors(bio_err);
++				sm2_doit[j] = 0;
++				} 
++			else 
++				{
++				pkey_print_message("decrypt","sm2",
++				sm2_c[j][3],
++				sm2_curves_bits[j],
++				ECDSA_SECONDS);
++				Time_F(START);
++				for (count=0,run=1; COND(sm2_c[j][3]); count++) 
++					{
++					ret=SM2_decrypt(sm2crpten, sm2crpt, sm2sig, sm2[j]);
++					if (ret <= 0) 
++						{
++						BIO_printf(bio_err, "SM2 decrypt failure\n");
++						ERR_print_errors(bio_err);
++						count=1;
++						break;
++						}
++					}
++				d=Time_F(STOP);
++				BIO_printf(bio_err, mr? "+R6:%ld:%d:%.2f\n"
++						: "%ld %d bit SM2 decrypt in %.2fs\n",
++						count, sm2_curves_bits[j], d);
++				sm2_results[j][3]=d/(double)count;
++				}
++
++			if (sm2_count <= 1) 
++				{
++				/* if longer than 10s, don't do any more */
++				for (j++; j<SM2_NUM; j++)
++					sm2_doit[j]=0;
++				}
++			}
++		}
++	if (rnd_fake) RAND_cleanup();
++#endif
+ #ifndef NO_FORK
+ show_res:
+ #endif
+@@ -2642,7 +2862,51 @@
+ 				ecdh_results[k][0], 1.0/ecdh_results[k][0]);
+ 		}
+ #endif
++#ifndef OPENSSL_NO_SM2
++	j=1;
++	for (k=0; k<SM2_NUM; k++)
++		{
++		if (!sm2_doit[k]) continue;
++		if (j && !mr)
++			{
++			printf("%18ssign    verify    sign/s verify/s\n"," ");
++			j=0;
++			}
+ 
++		if (mr)
++			fprintf(stdout,"+F6:%u:%u:%f:%f\n", 
++				k, sm2_curves_bits[k],
++				sm2_results[k][0],sm2_results[k][1]);
++		else
++			fprintf(stdout,
++				"sm2 %4u bits %8.6fs %8.6fs %8.1f %8.1f\n", 
++				sm2_curves_bits[k],
++				sm2_results[k][0],sm2_results[k][1], 
++				1.0/sm2_results[k][0],1.0/sm2_results[k][1]);
++		}
++	j=1;
++	for (k=0; k<SM2_NUM; k++)
++		{
++		if (!sm2_doit[k]) continue;
++		if (j && !mr)
++			{
++			printf("%15sencrypt   decrypt encrypt/s decrypt/s\n"," ");
++			j=0;
++			}
++
++		if (mr)
++			fprintf(stdout,"+F6:%u:%u:%f:%f\n", 
++				k, sm2_curves_bits[k],
++				sm2_results[k][2],sm2_results[k][3]);
++		else
++			fprintf(stdout,
++				"sm2 %4u bits %8.6fs %8.6fs %8.1f %8.1f\n", 
++				sm2_curves_bits[k],
++				sm2_results[k][2],sm2_results[k][3], 
++				1.0/sm2_results[k][2],1.0/sm2_results[k][3]);
++		}
++#endif
++
+ 	mret=0;
+ 
+ end:
+@@ -2674,6 +2938,11 @@
+ 			EC_KEY_free(ecdh_b[i]);
+ 	}
+ #endif
++#ifndef OPENSSL_NO_SM2
++	for (i=0; i<SM2_NUM; i++)
++		if (sm2[i] != NULL)
++			EC_KEY_free(sm2[i]);
++#endif
+ 
+ 	apps_shutdown();
+ 	OPENSSL_EXIT(mret);
+@@ -2931,7 +3200,30 @@
+ 
+ 				}
+ #endif
++#ifndef OPENSSL_NO_SM2
++			else if(!strncmp(buf,"+F6:",4))
++				{
++				int k;
++				double d;
++				
++				p=buf+4;
++				k=atoi(sstrsep(&p,sep));
++				sstrsep(&p,sep);
+ 
++				d=atof(sstrsep(&p,sep));
++				if(n)
++					sm2_results[k][0]=1/(1/sm2_results[k][0]+1/d);
++				else
++					sm2_results[k][0]=d;
++
++				d=atof(sstrsep(&p,sep));
++				if(n)
++					sm2_results[k][1]=1/(1/sm2_results[k][1]+1/d);
++				else
++					sm2_results[k][1]=d;
++				}
++#endif 
++
+ 			else if(!strncmp(buf,"+H:",3))
+ 				{
+ 				}
+Index: openssl-1.0.1e/Makefile.compile
+===================================================================
+--- openssl-1.0.1e/Makefile.compile	(revision 22741)
++++ openssl-1.0.1e/Makefile.compile	(working copy)
+@@ -155,7 +155,7 @@
+ 	bn ec rsa dsa ecdsa dh ecdh dso engine \
+ 	buffer bio stack lhash rand err \
+ 	evp asn1 pem x509 x509v3 conf txt_db pkcs7 pkcs12 comp ocsp ui krb5 \
+-	cms pqueue ts srp cmac sm1 sm3 sm4
++	cms pqueue ts srp cmac sm1 sm2 sm3 sm4
+ # keep in mind that the above list is adjusted by ./Configure
+ # according to no-xxx arguments...
+ 
+Index: openssl-1.0.1e/test/Makefile
+===================================================================
+--- openssl-1.0.1e/test/Makefile	(revision 22741)
++++ openssl-1.0.1e/test/Makefile	(working copy)
+@@ -31,6 +31,7 @@
+ BNTEST=		bntest
+ ECTEST=		ectest
+ ECDSATEST=	ecdsatest
++SM2TEST=	sm2test
+ ECDHTEST=	ecdhtest
+ EXPTEST=	exptest
+ IDEATEST=	ideatest
+@@ -74,13 +75,13 @@
+ 	$(RANDTEST)$(EXE_EXT) $(DHTEST)$(EXE_EXT) $(ENGINETEST)$(EXE_EXT) \
+ 	$(BFTEST)$(EXE_EXT) $(CASTTEST)$(EXE_EXT) $(SSLTEST)$(EXE_EXT) $(EXPTEST)$(EXE_EXT) $(DSATEST)$(EXE_EXT) $(RSATEST)$(EXE_EXT) \
+ 	$(EVPTEST)$(EXE_EXT) $(IGETEST)$(EXE_EXT) $(JPAKETEST)$(EXE_EXT) $(SRPTEST)$(EXE_EXT) \
+-	$(ASN1TEST)$(EXE_EXT)
++	$(ASN1TEST)$(EXE_EXT) $(SM2TEST)$(EXE_EXT)
+ 
+ # $(METHTEST)$(EXE_EXT)
+ 
+ OBJ=	$(BNTEST).o $(ECTEST).o  $(ECDSATEST).o $(ECDHTEST).o $(IDEATEST).o \
+ 	$(MD2TEST).o $(MD4TEST).o $(MD5TEST).o \
+-	$(HMACTEST).o $(WPTEST).o \
++	$(HMACTEST).o $(WPTEST).o $(SM2TEST).o \
+ 	$(RC2TEST).o $(RC4TEST).o $(RC5TEST).o \
+ 	$(DESTEST).o $(SHATEST).o $(SHA1TEST).o $(SHA256TEST).o $(SHA512TEST).o \
+ 	$(MDC2TEST).o $(RMDTEST).o \
+@@ -89,7 +90,7 @@
+ 	$(EVPTEST).o $(IGETEST).o $(JPAKETEST).o $(ASN1TEST).o
+ SRC=	$(BNTEST).c $(ECTEST).c  $(ECDSATEST).c $(ECDHTEST).c $(IDEATEST).c \
+ 	$(MD2TEST).c  $(MD4TEST).c $(MD5TEST).c \
+-	$(HMACTEST).c $(WPTEST).c \
++	$(HMACTEST).c $(WPTEST).c $(SM2TEST).c \
+ 	$(RC2TEST).c $(RC4TEST).c $(RC5TEST).c \
+ 	$(DESTEST).c $(SHATEST).c $(SHA1TEST).c $(MDC2TEST).c $(RMDTEST).c \
+ 	$(RANDTEST).c $(DHTEST).c $(ENGINETEST).c $(CASTTEST).c \
+@@ -137,7 +138,7 @@
+ 	test_enc test_x509 test_rsa test_crl test_sid \
+ 	test_gen test_req test_pkcs7 test_verify test_dh test_dsa \
+ 	test_ss test_ca test_engine test_evp test_ssl test_tsa test_ige \
+-	test_jpake test_srp test_cms
++	test_jpake test_srp test_cms test_sm2
+ 
+ test_evp:
+ 	../util/shlib_wrap.sh ./$(EVPTEST) evptests.txt
+@@ -239,6 +240,10 @@
+ 	@echo 'test ecdsa'
+ 	../util/shlib_wrap.sh ./$(ECDSATEST)
+ 
++test_sm2:
++	@echo 'test sm2'
++	../util/shlib_wrap.sh ./$(SM2TEST)
++
+ test_ecdh:
+ 	@echo 'test ecdh'
+ 	../util/shlib_wrap.sh ./$(ECDHTEST)
+@@ -454,6 +459,9 @@
+ $(ECDSATEST)$(EXE_EXT): $(ECDSATEST).o $(DLIBCRYPTO)
+ 	@target=$(ECDSATEST); $(BUILD_CMD)
+ 
++$(SM2TEST)$(EXE_EXT): $(SM2TEST).o $(DLIBCRYPTO)
++	@target=$(SM2TEST); $(BUILD_CMD)
++
+ $(ECDHTEST)$(EXE_EXT): $(ECDHTEST).o $(DLIBCRYPTO)
+ 	@target=$(ECDHTEST); $(BUILD_CMD)
+ 
+@@ -558,6 +566,20 @@
+ ecdsatest.o: ../include/openssl/stack.h ../include/openssl/symhacks.h
+ ecdsatest.o: ../include/openssl/x509.h ../include/openssl/x509_vfy.h
+ ecdsatest.o: ecdsatest.c
++sm2test.o: ../include/openssl/asn1.h ../include/openssl/bio.h
++sm2test.o: ../include/openssl/bn.h ../include/openssl/buffer.h
++sm2test.o: ../include/openssl/crypto.h ../include/openssl/e_os2.h
++sm2test.o: ../include/openssl/ec.h ../include/openssl/ecdh.h
++sm2test.o: ../include/openssl/sm2.h ../include/openssl/engine.h
++sm2test.o: ../include/openssl/err.h ../include/openssl/evp.h
++sm2test.o: ../include/openssl/lhash.h ../include/openssl/obj_mac.h
++sm2test.o: ../include/openssl/objects.h ../include/openssl/opensslconf.h
++sm2test.o: ../include/openssl/opensslv.h ../include/openssl/ossl_typ.h
++sm2test.o: ../include/openssl/pkcs7.h ../include/openssl/rand.h
++sm2test.o: ../include/openssl/safestack.h ../include/openssl/sha.h
++sm2test.o: ../include/openssl/stack.h ../include/openssl/symhacks.h
++sm2test.o: ../include/openssl/x509.h ../include/openssl/x509_vfy.h
++sm2test.o: sm2test.c
+ ectest.o: ../e_os.h ../include/openssl/asn1.h ../include/openssl/bio.h
+ ectest.o: ../include/openssl/bn.h ../include/openssl/buffer.h
+ ectest.o: ../include/openssl/crypto.h ../include/openssl/e_os2.h
+Index: openssl-1.0.1e/test/sm2test.c
+===================================================================
+--- openssl-1.0.1e/test/sm2test.c	(revision 0)
++++ openssl-1.0.1e/test/sm2test.c	(revision 0)
+@@ -0,0 +1 @@
++link ../crypto/sm2/sm2test.c
+\ No newline at end of file
+
+Property changes on: openssl-1.0.1e/test/sm2test.c
+___________________________________________________________________
+Added: svn:special
+   + *
+
+Index: openssl-1.0.1e/crypto/objects/obj_mac.h
+===================================================================
+--- openssl-1.0.1e/crypto/objects/obj_mac.h	(revision 22741)
++++ openssl-1.0.1e/crypto/objects/obj_mac.h	(working copy)
+@@ -519,7 +519,7 @@
+ #define SN_CN_GMJ		"CN-GMJ"
+ #define LN_CN_GMJ		"CN GMJ algorithm"
+ #define NID_CN_GMJ		921
+-#define OBJ_CN_GMJ		OBJ_ISO_CN,197L
++#define OBJ_CN_GMJ		OBJ_ISO_CN,10197L
+ 
+ #define SN_cast5_cbc		"CAST5-CBC"
+ #define LN_cast5_cbc		"cast5-cbc"
+@@ -2606,11 +2606,36 @@
+ #define NID_sm4_128_cbc		925
+ #define OBJ_sm4_128_cbc		OBJ_gm_alg,104L
+ 
++#define SN_sm2		"SM2"
++#define LN_sm2		"sm2"
++#define NID_sm2		926
++#define OBJ_sm2		OBJ_gm_alg,301L
++
++#define SN_sm2Signature		"SM2-1"
++#define LN_sm2Signature		"sm2Signature"
++#define NID_sm2Signature		927
++#define OBJ_sm2Signature		OBJ_gm_alg,301L,1L
++
++#define SN_sm2KeyAgreement		"SM2-2"
++#define LN_sm2KeyAgreement		"sm2KeyAgreement"
++#define NID_sm2KeyAgreement		928
++#define OBJ_sm2KeyAgreement		OBJ_gm_alg,301L,2L
++
++#define SN_sm2Encryption		"SM2-3"
++#define LN_sm2Encryption		"sm2Encryption"
++#define NID_sm2Encryption		929
++#define OBJ_sm2Encryption		OBJ_gm_alg,301L,3L
++
+ #define SN_sm3		"SM3"
+ #define LN_sm3		"sm3"
+ #define NID_sm3		923
+ #define OBJ_sm3		OBJ_gm_alg,401L
+ 
++#define SN_sm3WithSM2Encryption		"SM2-SM3"
++#define LN_sm3WithSM2Encryption		"sm3WithSM2Encryption"
++#define NID_sm3WithSM2Encryption		930
++#define OBJ_sm3WithSM2Encryption		OBJ_gm_alg,501L
++
+ #define SN_sm3WithRSAEncryption		"RSA-SM3"
+ #define LN_sm3WithRSAEncryption		"sm3WithRSAEncryption"
+ #define NID_sm3WithRSAEncryption		924
+Index: openssl-1.0.1e/crypto/objects/obj_xref.h
+===================================================================
+--- openssl-1.0.1e/crypto/objects/obj_xref.h	(revision 22741)
++++ openssl-1.0.1e/crypto/objects/obj_xref.h	(working copy)
+@@ -39,6 +39,8 @@
+ 	{NID_id_GostR3411_94_with_GostR3410_94_cc, NID_id_GostR3411_94, NID_id_GostR3410_94_cc},
+ 	{NID_id_GostR3411_94_with_GostR3410_2001_cc, NID_id_GostR3411_94, NID_id_GostR3410_2001_cc},
+ 	{NID_rsassaPss, NID_undef, NID_rsaEncryption},
++	{NID_sm3WithRSAEncryption, NID_sm3, NID_rsaEncryption},
++	{NID_sm3WithSM2Encryption, NID_sm3, NID_sm2Encryption},
+ 	};
+ 
+ static const nid_triple * const sigoid_srt_xref[] =
+@@ -73,5 +75,7 @@
+ 	&sigoid_srt[26],
+ 	&sigoid_srt[27],
+ 	&sigoid_srt[28],
++	&sigoid_srt[30],
++	&sigoid_srt[31],
+ 	};
+ 
+Index: openssl-1.0.1e/crypto/objects/obj_mac.num
+===================================================================
+--- openssl-1.0.1e/crypto/objects/obj_mac.num	(revision 22741)
++++ openssl-1.0.1e/crypto/objects/obj_mac.num	(working copy)
+@@ -923,3 +923,8 @@
+ sm3		923
+ sm3WithRSAEncryption		924
+ sm4_128_cbc		925
++sm2		926
++sm2Signature		927
++sm2KeyAgreement		928
++sm2Encryption		929
++sm3WithSM2Encryption		930
+Index: openssl-1.0.1e/crypto/objects/obj_dat.h
+===================================================================
+--- openssl-1.0.1e/crypto/objects/obj_dat.h	(revision 22741)
++++ openssl-1.0.1e/crypto/objects/obj_dat.h	(working copy)
+@@ -62,12 +62,12 @@
+  * [including the GNU Public Licence.]
+  */
+ 
+-#define NUM_NID 926
+-#define NUM_SN 919
+-#define NUM_LN 919
+-#define NUM_OBJ 863
++#define NUM_NID 931
++#define NUM_SN 924
++#define NUM_LN 924
++#define NUM_OBJ 868
+ 
+-static const unsigned char lvalues[6018]={
++static const unsigned char lvalues[6061]={
+ 0x00,                                        /* [  0] OBJ_undef */
+ 0x2A,0x86,0x48,0x86,0xF7,0x0D,               /* [  1] OBJ_rsadsi */
+ 0x2A,0x86,0x48,0x86,0xF7,0x0D,0x01,          /* [  7] OBJ_pkcs */
+@@ -926,11 +926,16 @@
+ 0x2A,0x86,0x48,0x86,0xF7,0x0D,0x01,0x01,0x0A,/* [5961] OBJ_rsassaPss */
+ 0x2A,0x86,0x48,0x86,0xF7,0x0D,0x01,0x01,0x07,/* [5970] OBJ_rsaesOaep */
+ 0x2A,0x81,0x1C,                              /* [5979] OBJ_ISO_CN */
+-0x2A,0x81,0x1C,0x81,0x45,                    /* [5982] OBJ_CN_GMJ */
+-0x2A,0x81,0x1C,0x81,0x45,0x01,0x66,          /* [5987] OBJ_sm1_128_cbc */
+-0x2A,0x81,0x1C,0x81,0x45,0x01,0x83,0x11,     /* [5994] OBJ_sm3 */
+-0x2A,0x81,0x1C,0x81,0x45,0x01,0x83,0x78,     /* [6002] OBJ_sm3WithRSAEncryption */
+-0x2A,0x81,0x1C,0x81,0x45,0x01,0x68,          /* [6010] OBJ_sm4_128_cbc */
++0x2A,0x81,0x1C,0xCF,0x55,                    /* [5982] OBJ_CN_GMJ */
++0x2A,0x81,0x1C,0xCF,0x55,0x01,0x66,          /* [5987] OBJ_sm1_128_cbc */
++0x2A,0x81,0x1C,0xCF,0x55,0x01,0x83,0x11,     /* [5994] OBJ_sm3 */
++0x2A,0x81,0x1C,0xCF,0x55,0x01,0x83,0x78,     /* [6002] OBJ_sm3WithRSAEncryption */
++0x2A,0x81,0x1C,0xCF,0x55,0x01,0x68,          /* [6010] OBJ_sm4_128_cbc */
++0x2A,0x81,0x1C,0xCF,0x55,0x01,0x82,0x2D,     /* [6017] OBJ_sm2 */
++0x2A,0x81,0x1C,0xCF,0x55,0x01,0x82,0x2D,0x01,/* [6025] OBJ_sm2Signature */
++0x2A,0x81,0x1C,0xCF,0x55,0x01,0x82,0x2D,0x02,/* [6034] OBJ_sm2KeyAgreement */
++0x2A,0x81,0x1C,0xCF,0x55,0x01,0x82,0x2D,0x03,/* [6043] OBJ_sm2Encryption */
++0x2A,0x81,0x1C,0xCF,0x55,0x01,0x83,0x75,     /* [6052] OBJ_sm3WithSM2Encryption */
+ };
+ 
+ static const ASN1_OBJECT nid_objs[NUM_NID]={
+@@ -2419,6 +2424,12 @@
+ {"RSA-SM3","sm3WithRSAEncryption",NID_sm3WithRSAEncryption,8,
+ 	&(lvalues[6002]),0},
+ {"SM4-128-CBC","sm4-128-cbc",NID_sm4_128_cbc,7,&(lvalues[6010]),0},
++{"SM2","sm2",NID_sm2,8,&(lvalues[6017]),0},
++{"SM2-1","sm2Signature",NID_sm2Signature,9,&(lvalues[6025]),0},
++{"SM2-2","sm2KeyAgreement",NID_sm2KeyAgreement,9,&(lvalues[6034]),0},
++{"SM2-3","sm2Encryption",NID_sm2Encryption,9,&(lvalues[6043]),0},
++{"SM2-SM3","sm3WithSM2Encryption",NID_sm3WithSM2Encryption,8,
++	&(lvalues[6052]),0},
+ };
+ 
+ static const unsigned int sn_objs[NUM_SN]={
+@@ -2602,6 +2613,11 @@
+ 673,	/* "SHA384" */
+ 674,	/* "SHA512" */
+ 922,	/* "SM1-128-CBC" */
++926,	/* "SM2" */
++927,	/* "SM2-1" */
++928,	/* "SM2-2" */
++929,	/* "SM2-3" */
++930,	/* "SM2-SM3" */
+ 923,	/* "SM3" */
+ 925,	/* "SM4-128-CBC" */
+ 188,	/* "SMIME" */
+@@ -4217,8 +4233,13 @@
+ 454,	/* "simpleSecurityObject" */
+ 496,	/* "singleLevelQuality" */
+ 922,	/* "sm1-128-cbc" */
++926,	/* "sm2" */
++929,	/* "sm2Encryption" */
++928,	/* "sm2KeyAgreement" */
++927,	/* "sm2Signature" */
+ 923,	/* "sm3" */
+ 924,	/* "sm3WithRSAEncryption" */
++930,	/* "sm3WithSM2Encryption" */
+ 925,	/* "sm4-128-cbc" */
+ 16,	/* "stateOrProvinceName" */
+ 660,	/* "streetAddress" */
+@@ -4501,7 +4522,7 @@
+ 637,	/* OBJ_set_brand_Diners             2 23 42 8 30 */
+ 638,	/* OBJ_set_brand_AmericanExpress    2 23 42 8 34 */
+ 639,	/* OBJ_set_brand_JCB                2 23 42 8 35 */
+-921,	/* OBJ_CN_GMJ                       1 2 156 197 */
++921,	/* OBJ_CN_GMJ                       1 2 156 10197 */
+ 805,	/* OBJ_cryptopro                    1 2 643 2 2 */
+ 806,	/* OBJ_cryptocom                    1 2 643 2 9 */
+ 184,	/* OBJ_X9_57                        1 2 840 10040 */
+@@ -4600,8 +4621,8 @@
+ 634,	/* OBJ_setAttr_TokICCsig            2 23 42 3 3 5 1 */
+ 635,	/* OBJ_setAttr_SecDevSig            2 23 42 3 3 5 2 */
+ 436,	/* OBJ_ucl                          0 9 2342 19200300 */
+-922,	/* OBJ_sm1_128_cbc                  1 2 156 197 1 102 */
+-925,	/* OBJ_sm4_128_cbc                  1 2 156 197 1 104 */
++922,	/* OBJ_sm1_128_cbc                  1 2 156 10197 1 102 */
++925,	/* OBJ_sm4_128_cbc                  1 2 156 10197 1 104 */
+ 820,	/* OBJ_id_Gost28147_89_None_KeyMeshing 1 2 643 2 2 14 0 */
+ 819,	/* OBJ_id_Gost28147_89_CryptoPro_KeyMeshing 1 2 643 2 2 14 1 */
+ 845,	/* OBJ_id_GostR3410_94_a            1 2 643 2 2 20 1 */
+@@ -4672,8 +4693,10 @@
+ 768,	/* OBJ_camellia_256_ofb128          0 3 4401 5 3 1 9 43 */
+ 759,	/* OBJ_camellia_256_cfb128          0 3 4401 5 3 1 9 44 */
+ 437,	/* OBJ_pilot                        0 9 2342 19200300 100 */
+-923,	/* OBJ_sm3                          1 2 156 197 1 401 */
+-924,	/* OBJ_sm3WithRSAEncryption         1 2 156 197 1 504 */
++926,	/* OBJ_sm2                          1 2 156 10197 1 301 */
++923,	/* OBJ_sm3                          1 2 156 10197 1 401 */
++930,	/* OBJ_sm3WithSM2Encryption         1 2 156 10197 1 501 */
++924,	/* OBJ_sm3WithRSAEncryption         1 2 156 10197 1 504 */
+ 776,	/* OBJ_seed_ecb                     1 2 410 200004 1 3 */
+ 777,	/* OBJ_seed_cbc                     1 2 410 200004 1 4 */
+ 779,	/* OBJ_seed_cfb128                  1 2 410 200004 1 5 */
+@@ -4851,6 +4874,9 @@
+ 439,	/* OBJ_pilotAttributeSyntax         0 9 2342 19200300 100 3 */
+ 440,	/* OBJ_pilotObjectClass             0 9 2342 19200300 100 4 */
+ 441,	/* OBJ_pilotGroups                  0 9 2342 19200300 100 10 */
++927,	/* OBJ_sm2Signature                 1 2 156 10197 1 301 1 */
++928,	/* OBJ_sm2KeyAgreement              1 2 156 10197 1 301 2 */
++929,	/* OBJ_sm2Encryption                1 2 156 10197 1 301 3 */
+ 108,	/* OBJ_cast5_cbc                    1 2 840 113533 7 66 10 */
+ 112,	/* OBJ_pbeWithMD5AndCast5_CBC       1 2 840 113533 7 66 12 */
+ 782,	/* OBJ_id_PasswordBasedMAC          1 2 840 113533 7 66 13 */
+Index: openssl-1.0.1e/crypto/objects/objects.txt
+===================================================================
+--- openssl-1.0.1e/crypto/objects/objects.txt	(revision 22741)
++++ openssl-1.0.1e/crypto/objects/objects.txt	(working copy)
+@@ -145,7 +145,7 @@
+ wap-wsg-idm-ecid 12	: wap-wsg-idm-ecid-wtls12
+ 
+ # add gmj
+-ISO-CN 197		: CN-GMJ		: CN GMJ algorithm
++ISO-CN 10197		: CN-GMJ		: CN GMJ algorithm
+ 
+ ISO-US 113533 7 66 10	: CAST5-CBC		: cast5-cbc
+ 			: CAST5-ECB		: cast5-ecb
+@@ -852,7 +852,12 @@
+ !Alias gm-alg	CN-GMJ 1
+ gm-alg 102	: SM1-128-CBC	: sm1-128-cbc
+ gm-alg 104	: SM4-128-CBC	: sm4-128-cbc
++gm-alg 301	: SM2	: sm2
++gm-alg 301 1	: SM2-1	: sm2Signature
++gm-alg 301 2	: SM2-2	: sm2KeyAgreement
++gm-alg 301 3	: SM2-3	: sm2Encryption
+ gm-alg 401	: SM3	: sm3
++gm-alg 501	: SM2-SM3	: sm3WithSM2Encryption
+ gm-alg 504	: RSA-SM3	: sm3WithRSAEncryption
+ 
+ # AES aka Rijndael
+Index: openssl-1.0.1e/crypto/objects/obj_xref.txt
+===================================================================
+--- openssl-1.0.1e/crypto/objects/obj_xref.txt	(revision 22741)
++++ openssl-1.0.1e/crypto/objects/obj_xref.txt	(working copy)
+@@ -11,6 +11,8 @@
+ sha384WithRSAEncryption	sha384	rsaEncryption
+ sha512WithRSAEncryption	sha512	rsaEncryption
+ sha224WithRSAEncryption	sha224	rsaEncryption
++sm3WithSM2Encryption	sm3	sm2Encryption
++sm3WithRSAEncryption	sm3	rsaEncryption
+ mdc2WithRSA		mdc2	rsaEncryption
+ ripemd160WithRSA	ripemd160 rsaEncryption
+ # For PSS the digest algorithm can vary and depends on the included
+Index: openssl-1.0.1e/crypto/ossl_typ.h
+===================================================================
+--- openssl-1.0.1e/crypto/ossl_typ.h	(revision 22741)
++++ openssl-1.0.1e/crypto/ossl_typ.h	(working copy)
+@@ -144,6 +144,7 @@
+ 
+ typedef struct ecdh_method ECDH_METHOD;
+ typedef struct ecdsa_method ECDSA_METHOD;
++typedef struct sm2_method SM2_METHOD;
+ 
+ typedef struct x509_st X509;
+ typedef struct X509_algor_st X509_ALGOR;
+Index: openssl-1.0.1e/crypto/engine/engine.h
+===================================================================
+--- openssl-1.0.1e/crypto/engine/engine.h	(revision 22741)
++++ openssl-1.0.1e/crypto/engine/engine.h	(working copy)
+@@ -87,6 +87,9 @@
+ #ifndef OPENSSL_NO_ECDSA
+ #include <openssl/ecdsa.h>
+ #endif
++#ifndef OPENSSL_NO_SM2
++#include <openssl/sm2.h>
++#endif
+ #include <openssl/rand.h>
+ #include <openssl/ui.h>
+ #include <openssl/err.h>
+@@ -114,6 +117,7 @@
+ #define ENGINE_METHOD_STORE		(unsigned int)0x0100
+ #define ENGINE_METHOD_PKEY_METHS	(unsigned int)0x0200
+ #define ENGINE_METHOD_PKEY_ASN1_METHS	(unsigned int)0x0400
++#define ENGINE_METHOD_SM2		(unsigned int)0x0800
+ /* Obvious all-or-nothing cases. */
+ #define ENGINE_METHOD_ALL		(unsigned int)0xFFFF
+ #define ENGINE_METHOD_NONE		(unsigned int)0x0000
+@@ -388,6 +392,10 @@
+ void ENGINE_unregister_DH(ENGINE *e);
+ void ENGINE_register_all_DH(void);
+ 
++int ENGINE_register_SM2(ENGINE *e);
++void ENGINE_unregister_SM2(ENGINE *e);
++void ENGINE_register_all_SM2(void);
++
+ int ENGINE_register_RAND(ENGINE *e);
+ void ENGINE_unregister_RAND(ENGINE *e);
+ void ENGINE_register_all_RAND(void);
+@@ -478,6 +486,7 @@
+ int ENGINE_set_DSA(ENGINE *e, const DSA_METHOD *dsa_meth);
+ int ENGINE_set_ECDH(ENGINE *e, const ECDH_METHOD *ecdh_meth);
+ int ENGINE_set_ECDSA(ENGINE *e, const ECDSA_METHOD *ecdsa_meth);
++int ENGINE_set_SM2(ENGINE *e, const SM2_METHOD *sm2_meth);
+ int ENGINE_set_DH(ENGINE *e, const DH_METHOD *dh_meth);
+ int ENGINE_set_RAND(ENGINE *e, const RAND_METHOD *rand_meth);
+ int ENGINE_set_STORE(ENGINE *e, const STORE_METHOD *store_meth);
+@@ -517,6 +526,7 @@
+ const DSA_METHOD *ENGINE_get_DSA(const ENGINE *e);
+ const ECDH_METHOD *ENGINE_get_ECDH(const ENGINE *e);
+ const ECDSA_METHOD *ENGINE_get_ECDSA(const ENGINE *e);
++const SM2_METHOD *ENGINE_get_SM2(const ENGINE *e);
+ const DH_METHOD *ENGINE_get_DH(const ENGINE *e);
+ const RAND_METHOD *ENGINE_get_RAND(const ENGINE *e);
+ const STORE_METHOD *ENGINE_get_STORE(const ENGINE *e);
+@@ -584,6 +594,7 @@
+ ENGINE *ENGINE_get_default_DSA(void);
+ ENGINE *ENGINE_get_default_ECDH(void);
+ ENGINE *ENGINE_get_default_ECDSA(void);
++ENGINE *ENGINE_get_default_SM2(void);
+ ENGINE *ENGINE_get_default_DH(void);
+ ENGINE *ENGINE_get_default_RAND(void);
+ /* These functions can be used to get a functional reference to perform
+@@ -603,6 +614,7 @@
+ int ENGINE_set_default_DSA(ENGINE *e);
+ int ENGINE_set_default_ECDH(ENGINE *e);
+ int ENGINE_set_default_ECDSA(ENGINE *e);
++int ENGINE_set_default_SM2(ENGINE *e);
+ int ENGINE_set_default_DH(ENGINE *e);
+ int ENGINE_set_default_RAND(ENGINE *e);
+ int ENGINE_set_default_ciphers(ENGINE *e);
+Index: openssl-1.0.1e/crypto/engine/tb_sm2.c
+===================================================================
+--- openssl-1.0.1e/crypto/engine/tb_sm2.c	(revision 0)
++++ openssl-1.0.1e/crypto/engine/tb_sm2.c	(revision 0)
+@@ -0,0 +1,65 @@
++#include "eng_int.h"
++
++/* If this symbol is defined then ENGINE_get_default_SM2(), the function that is
++ * used by SM2 to hook in implementation code and cache defaults (etc), will
++ * display brief debugging summaries to stderr with the 'nid'. */
++/* #define ENGINE_SM2_DEBUG */
++
++static ENGINE_TABLE *sm2_table = NULL;
++static const int dummy_nid = 1;
++
++void ENGINE_unregister_SM2(ENGINE *e)
++	{
++	engine_table_unregister(&sm2_table, e);
++	}
++
++static void engine_unregister_all_SM2(void)
++	{
++	engine_table_cleanup(&sm2_table);
++	}
++
++int ENGINE_register_SM2(ENGINE *e)
++	{
++	if(e->sm2_meth)
++		return engine_table_register(&sm2_table,
++				engine_unregister_all_SM2, e, &dummy_nid, 1, 0);
++	return 1;
++	}
++
++void ENGINE_register_all_SM2()
++	{
++	ENGINE *e;
++
++	for(e=ENGINE_get_first() ; e ; e=ENGINE_get_next(e))
++		ENGINE_register_SM2(e);
++	}
++
++int ENGINE_set_default_SM2(ENGINE *e)
++	{
++	if(e->sm2_meth)
++		return engine_table_register(&sm2_table,
++				engine_unregister_all_SM2, e, &dummy_nid, 1, 1);
++	return 1;
++	}
++
++/* Exposed API function to get a functional reference from the implementation
++ * table (ie. try to get a functional reference from the tabled structural
++ * references). */
++ENGINE *ENGINE_get_default_SM2(void)
++	{
++	return engine_table_select(&sm2_table, dummy_nid);
++	}
++
++/* Obtains an SM2 implementation from an ENGINE functional reference */
++const SM2_METHOD *ENGINE_get_SM2(const ENGINE *e)
++	{
++	return e->sm2_meth;
++	}
++
++/* Sets an SM2 implementation in an ENGINE structure */
++int ENGINE_set_SM2(ENGINE *e, const SM2_METHOD *sm2_meth)
++	{
++	e->sm2_meth = sm2_meth;
++	return 1;
++	}
++
+
+Property changes on: openssl-1.0.1e/crypto/engine/tb_sm2.c
+___________________________________________________________________
+Added: svn:executable
+   + *
+
+Index: openssl-1.0.1e/crypto/engine/eng_int.h
+===================================================================
+--- openssl-1.0.1e/crypto/engine/eng_int.h	(revision 22741)
++++ openssl-1.0.1e/crypto/engine/eng_int.h	(working copy)
+@@ -161,6 +161,7 @@
+ 	const DH_METHOD *dh_meth;
+ 	const ECDH_METHOD *ecdh_meth;
+ 	const ECDSA_METHOD *ecdsa_meth;
++	const SM2_METHOD *sm2_meth;
+ 	const RAND_METHOD *rand_meth;
+ 	const STORE_METHOD *store_meth;
+ 	/* Cipher handling is via this callback */
+Index: openssl-1.0.1e/crypto/engine/Makefile
+===================================================================
+--- openssl-1.0.1e/crypto/engine/Makefile	(revision 22741)
++++ openssl-1.0.1e/crypto/engine/Makefile	(working copy)
+@@ -19,13 +19,13 @@
+ LIB=$(TOP)/libsg_crypto.a
+ LIBSRC= eng_err.c eng_lib.c eng_list.c eng_init.c eng_ctrl.c \
+ 	eng_table.c eng_pkey.c eng_fat.c eng_all.c \
+-	tb_rsa.c tb_dsa.c tb_ecdsa.c tb_dh.c tb_ecdh.c tb_rand.c tb_store.c \
++	tb_rsa.c tb_dsa.c tb_ecdsa.c tb_dh.c tb_ecdh.c tb_rand.c tb_sm2.c tb_store.c \
+ 	tb_cipher.c tb_digest.c tb_pkmeth.c tb_asnmth.c \
+ 	eng_openssl.c eng_cnf.c eng_dyn.c eng_cryptodev.c \
+ 	eng_rsax.c eng_rdrand.c
+ LIBOBJ= eng_err.o eng_lib.o eng_list.o eng_init.o eng_ctrl.o \
+ 	eng_table.o eng_pkey.o eng_fat.o eng_all.o \
+-	tb_rsa.o tb_dsa.o tb_ecdsa.o tb_dh.o tb_ecdh.o tb_rand.o tb_store.o \
++	tb_rsa.o tb_dsa.o tb_ecdsa.o tb_dh.o tb_ecdh.o tb_rand.o tb_sm2.o tb_store.o \
+ 	tb_cipher.o tb_digest.o tb_pkmeth.o tb_asnmth.o \
+ 	eng_openssl.o eng_cnf.o eng_dyn.o eng_cryptodev.o \
+ 	eng_rsax.o eng_rdrand.o
+@@ -432,6 +432,19 @@
+ tb_rsa.o: ../../include/openssl/stack.h ../../include/openssl/symhacks.h
+ tb_rsa.o: ../../include/openssl/x509.h ../../include/openssl/x509_vfy.h
+ tb_rsa.o: ../cryptlib.h eng_int.h tb_rsa.c
++tb_sm2.o: ../../e_os.h ../../include/openssl/asn1.h
++tb_sm2.o: ../../include/openssl/bio.h ../../include/openssl/buffer.h
++tb_sm2.o: ../../include/openssl/crypto.h ../../include/openssl/e_os2.h
++tb_sm2.o: ../../include/openssl/ec.h ../../include/openssl/ecdh.h
++tb_sm2.o: ../../include/openssl/ecdsa.h ../../include/openssl/engine.h
++tb_sm2.o: ../../include/openssl/err.h ../../include/openssl/evp.h
++tb_sm2.o: ../../include/openssl/lhash.h ../../include/openssl/obj_mac.h
++tb_sm2.o: ../../include/openssl/objects.h ../../include/openssl/opensslconf.h
++tb_sm2.o: ../../include/openssl/opensslv.h ../../include/openssl/ossl_typ.h
++tb_sm2.o: ../../include/openssl/pkcs7.h ../../include/openssl/safestack.h
++tb_sm2.o: ../../include/openssl/sha.h ../../include/openssl/stack.h
++tb_sm2.o: ../../include/openssl/symhacks.h ../../include/openssl/x509.h
++tb_sm2.o: ../../include/openssl/x509_vfy.h ../cryptlib.h eng_int.h tb_sm2.c
+ tb_store.o: ../../e_os.h ../../include/openssl/asn1.h
+ tb_store.o: ../../include/openssl/bio.h ../../include/openssl/buffer.h
+ tb_store.o: ../../include/openssl/crypto.h ../../include/openssl/e_os2.h
+Index: openssl-1.0.1e/crypto/err/err.h
+===================================================================
+--- openssl-1.0.1e/crypto/err/err.h	(revision 22741)
++++ openssl-1.0.1e/crypto/err/err.h	(working copy)
+@@ -198,6 +198,7 @@
+ #define ERR_LIB_TS		47
+ #define ERR_LIB_HMAC		48
+ #define ERR_LIB_JPAKE		49
++#define ERR_LIB_SM2		50
+ 
+ #define ERR_LIB_USER		128
+ 
+@@ -228,6 +229,7 @@
+ #define COMPerr(f,r) ERR_PUT_error(ERR_LIB_COMP,(f),(r),__FILE__,__LINE__)
+ #define ECDSAerr(f,r)  ERR_PUT_error(ERR_LIB_ECDSA,(f),(r),__FILE__,__LINE__)
+ #define ECDHerr(f,r)  ERR_PUT_error(ERR_LIB_ECDH,(f),(r),__FILE__,__LINE__)
++#define SM2err(f,r)  ERR_PUT_error(ERR_LIB_SM2,(f),(r),__FILE__,__LINE__)
+ #define STOREerr(f,r) ERR_PUT_error(ERR_LIB_STORE,(f),(r),__FILE__,__LINE__)
+ #define FIPSerr(f,r) ERR_PUT_error(ERR_LIB_FIPS,(f),(r),__FILE__,__LINE__)
+ #define CMSerr(f,r) ERR_PUT_error(ERR_LIB_CMS,(f),(r),__FILE__,__LINE__)
+Index: openssl-1.0.1e/crypto/evp/Makefile
+===================================================================
+--- openssl-1.0.1e/crypto/evp/Makefile	(revision 22741)
++++ openssl-1.0.1e/crypto/evp/Makefile	(working copy)
+@@ -29,7 +29,7 @@
+ 	c_all.c c_allc.c c_alld.c evp_lib.c bio_ok.c \
+ 	evp_pkey.c evp_pbe.c p5_crpt.c p5_crpt2.c \
+ 	e_old.c pmeth_lib.c pmeth_fn.c pmeth_gn.c m_sigver.c evp_fips.c	\
+-	e_aes_cbc_hmac_sha1.c e_rc4_hmac_md5.c e_sm1.c m_sm3.c e_sm4.c
++	e_aes_cbc_hmac_sha1.c e_rc4_hmac_md5.c e_sm1.c m_sm3.c e_sm4.c m_sm3_sm2.c
+ 
+ LIBOBJ=	encode.o digest.o evp_enc.o evp_key.o evp_acnf.o evp_cnf.o \
+ 	e_des.o e_bf.o e_idea.o e_des3.o e_camellia.o\
+@@ -42,7 +42,7 @@
+ 	c_all.o c_allc.o c_alld.o evp_lib.o bio_ok.o \
+ 	evp_pkey.o evp_pbe.o p5_crpt.o p5_crpt2.o \
+ 	e_old.o pmeth_lib.o pmeth_fn.o pmeth_gn.o m_sigver.o evp_fips.o \
+-	e_aes_cbc_hmac_sha1.o e_rc4_hmac_md5.o e_sm1.o m_sm3.o e_sm4.o
++	e_aes_cbc_hmac_sha1.o e_rc4_hmac_md5.o e_sm1.o m_sm3.o e_sm4.o m_sm3_sm2.o
+ 
+ SRC= $(LIBSRC)
+ 
+@@ -556,6 +556,19 @@
+ m_ripemd.o: ../../include/openssl/symhacks.h ../../include/openssl/x509.h
+ m_ripemd.o: ../../include/openssl/x509_vfy.h ../cryptlib.h evp_locl.h
+ m_ripemd.o: m_ripemd.c
++m_sm3_sm2.o: ../../e_os.h ../../include/openssl/asn1.h
++m_sm3_sm2.o: ../../include/openssl/bio.h ../../include/openssl/buffer.h
++m_sm3_sm2.o: ../../include/openssl/crypto.h ../../include/openssl/e_os2.h
++m_sm3_sm2.o: ../../include/openssl/ec.h ../../include/openssl/ecdh.h
++m_sm3_sm2.o: ../../include/openssl/sm2.h ../../include/openssl/err.h
++m_sm3_sm2.o: ../../include/openssl/evp.h ../../include/openssl/lhash.h
++m_sm3_sm2.o: ../../include/openssl/obj_mac.h ../../include/openssl/objects.h
++m_sm3_sm2.o: ../../include/openssl/opensslconf.h ../../include/openssl/opensslv.h
++m_sm3_sm2.o: ../../include/openssl/ossl_typ.h ../../include/openssl/pkcs7.h
++m_sm3_sm2.o: ../../include/openssl/safestack.h ../../include/openssl/sm3.h
++m_sm3_sm2.o: ../../include/openssl/stack.h ../../include/openssl/symhacks.h
++m_sm3_sm2.o: ../../include/openssl/x509.h ../../include/openssl/x509_vfy.h
++m_sm3_sm2.o: ../cryptlib.h evp_locl.h m_sm3_sm2.c
+ m_sha.o: ../../e_os.h ../../include/openssl/asn1.h ../../include/openssl/bio.h
+ m_sha.o: ../../include/openssl/buffer.h ../../include/openssl/crypto.h
+ m_sha.o: ../../include/openssl/e_os2.h ../../include/openssl/ec.h
+Index: openssl-1.0.1e/crypto/evp/m_sm3_sm2.c
+===================================================================
+--- openssl-1.0.1e/crypto/evp/m_sm3_sm2.c	(revision 0)
++++ openssl-1.0.1e/crypto/evp/m_sm3_sm2.c	(revision 0)
+@@ -0,0 +1,43 @@
++/* crypto/evp/m_sm2.c */
++
++#include <stdio.h>
++#include "cryptlib.h"
++
++#ifndef OPENSSL_NO_SM3
++
++#include <openssl/evp.h>
++#include <openssl/objects.h>
++#include <openssl/x509.h>
++#include <openssl/sm3.h>
++#include "evp_locl.h"
++
++static int init(EVP_MD_CTX *ctx)
++	{ return SM3_Init(ctx->md_data); }
++
++static int update(EVP_MD_CTX *ctx,const void *data,size_t count)
++	{ return SM3_Update(ctx->md_data,data,count); }
++
++static int final(EVP_MD_CTX *ctx,unsigned char *md)
++	{ return SM3_Final(md,ctx->md_data); }
++
++static const EVP_MD sm3_sm2_md=
++	{
++	NID_sm3WithSM2Encryption,
++	NID_sm3WithSM2Encryption,
++	SM3_DIGEST_LENGTH,
++	0,
++	init,
++	update,
++	final,
++	NULL,
++	NULL,
++	EVP_PKEY_SM2_method,
++	SM3_CBLOCK,
++	sizeof(EVP_MD *)+sizeof(SM3_CTX),
++	};
++
++const EVP_MD *EVP_sm3_sm2(void)
++	{
++	return(&sm3_sm2_md);
++	}
++#endif
+
+Property changes on: openssl-1.0.1e/crypto/evp/m_sm3_sm2.c
+___________________________________________________________________
+Added: svn:executable
+   + *
+
+Index: openssl-1.0.1e/crypto/evp/c_alld.c
+===================================================================
+--- openssl-1.0.1e/crypto/evp/c_alld.c	(revision 22741)
++++ openssl-1.0.1e/crypto/evp/c_alld.c	(working copy)
+@@ -113,5 +113,8 @@
+ #endif
+ #ifndef OPENSSL_NO_SM3
+ 	EVP_add_digest(EVP_sm3());
++#ifndef OPENSSL_NO_SM2
++	EVP_add_digest(EVP_sm3_sm2());
+ #endif
++#endif
+ 	}
+Index: openssl-1.0.1e/crypto/evp/evp.h
+===================================================================
+--- openssl-1.0.1e/crypto/evp/evp.h	(revision 22741)
++++ openssl-1.0.1e/crypto/evp/evp.h	(working copy)
+@@ -260,6 +260,14 @@
+ #define EVP_PKEY_RSA_ASN1_OCTET_STRING_method EVP_PKEY_NULL_method
+ #endif
+ 
++#ifndef OPENSSL_NO_SM2
++#define EVP_PKEY_SM2_method   (evp_sign_method *)SM2_sign, \
++				(evp_verify_method *)SM2_verify, \
++                                 {EVP_PKEY_EC,0,0,0}
++#else   
++#define EVP_PKEY_SM2_method   EVP_PKEY_NULL_method
++#endif
++
+ #endif /* !EVP_MD */
+ 
+ struct env_md_ctx_st
+@@ -855,7 +863,10 @@
+ 
+ #ifndef OPENSSL_NO_SM3
+ const EVP_MD *EVP_sm3(void);
++#ifndef OPENSSL_NO_SM2
++const EVP_MD *EVP_sm3_sm2(void);
+ #endif
++#endif
+ 
+ #ifndef OPENSSL_NO_SM4
+ const EVP_CIPHER *EVP_sm4_128_cbc(void);
+Index: openssl-1.0.1e/crypto/asn1/a_verify.c
+===================================================================
+--- openssl-1.0.1e/crypto/asn1/a_verify.c	(revision 22741)
++++ openssl-1.0.1e/crypto/asn1/a_verify.c	(working copy)
+@@ -138,7 +138,7 @@
+ 	unsigned char *buf_in=NULL;
+ 	int ret= -1,inl;
+ 
+-	int mdnid, pknid;
++	int signid, mdnid, pknid;
+ 
+ 	if (!pkey)
+ 		{
+@@ -149,12 +149,13 @@
+ 	EVP_MD_CTX_init(&ctx);
+ 
+ 	/* Convert signature OID into digest and public key OIDs */
+-	if (!OBJ_find_sigid_algs(OBJ_obj2nid(a->algorithm), &mdnid, &pknid))
++	signid = OBJ_obj2nid(a->algorithm);
++	if (!OBJ_find_sigid_algs(signid, &mdnid, &pknid))
+ 		{
+ 		ASN1err(ASN1_F_ASN1_ITEM_VERIFY,ASN1_R_UNKNOWN_SIGNATURE_ALGORITHM);
+ 		goto err;
+ 		}
+-	if (mdnid == NID_undef)
++	if (mdnid == NID_undef || signid == NID_sm3WithSM2Encryption)
+ 		{
+ 		if (!pkey->ameth || !pkey->ameth->item_verify)
+ 			{
+Index: openssl-1.0.1e/crypto/x509/x509.h
+===================================================================
+--- openssl-1.0.1e/crypto/x509/x509.h	(revision 22741)
++++ openssl-1.0.1e/crypto/x509/x509.h	(working copy)
+@@ -91,6 +91,10 @@
+ #include <openssl/ecdh.h>
+ #endif
+ 
++#ifndef OPENSSL_NO_SM2
++#include <openssl/sm2.h>
++#endif
++
+ #ifndef OPENSSL_NO_DEPRECATED
+ #ifndef OPENSSL_NO_RSA
+ #include <openssl/rsa.h>
+Index: openssl-1.0.1e/crypto/ec/ec_ameth.c
+===================================================================
+--- openssl-1.0.1e/crypto/ec/ec_ameth.c	(revision 22741)
++++ openssl-1.0.1e/crypto/ec/ec_ameth.c	(working copy)
+@@ -64,6 +64,10 @@
+ #include <openssl/cms.h>
+ #endif
+ #include "asn1_locl.h"
++#if !defined(OPENSSL_NO_SM2) && !defined(OPENSSL_NO_SM3)
++#include <openssl/sm3.h>
++#include <openssl/sm2.h>
++#endif
+ 
+ static int eckey_param2type(int *pptype, void **ppval, EC_KEY *ec_key)
+ 	{
+@@ -625,6 +629,68 @@
+ 
+ 	}
+ 
++static int eckey_item_verify(EVP_MD_CTX *ctx, const ASN1_ITEM *it, void *asn,
++			X509_ALGOR *sigalg, ASN1_BIT_STRING *sig,
++			EVP_PKEY *pkey)
++{
++#if !defined(OPENSSL_NO_SM2) && !defined(OPENSSL_NO_SM3)
++	const EVP_MD *md = EVP_sm3_sm2();
++	unsigned char Z[SM3_DIGEST_LENGTH] = {0,};
++
++	/* Sanity check: make sure it is SM2 */
++	if (OBJ_obj2nid(sigalg->algorithm) != NID_sm3WithSM2Encryption) {
++		ECerr(EC_F_DO_EC_KEY_PRINT, EC_R_INVALID_DIGEST_TYPE);
++		return -1;
++	}
++
++	if (!EVP_DigestVerifyInit(ctx, NULL, md, NULL, pkey))
++		return -1;
++
++	if (SM2_sign_pre_process(pkey->pkey.ec, Z))
++		return -1;
++
++	if (!EVP_DigestVerifyUpdate(ctx, Z, SM3_DIGEST_LENGTH)) {
++		return -1;
++	}
++#endif
++
++	return 2;
++}
++
++static int eckey_item_sign(EVP_MD_CTX *ctx, const ASN1_ITEM *it, void *asn,
++			X509_ALGOR *alg1, X509_ALGOR *alg2, 
++			ASN1_BIT_STRING *sig)
++{
++#if !defined(OPENSSL_NO_SM2) && !defined(OPENSSL_NO_SM3)
++	const EVP_MD *md = EVP_MD_CTX_md(ctx);
++	EVP_PKEY *pkey = EVP_PKEY_CTX_get0_pkey(ctx->pctx);
++	EC_KEY *x = pkey->pkey.ec;
++	const EC_GROUP *group;
++
++	unsigned char Z[SM3_DIGEST_LENGTH] = {0,};
++
++	/* Only SM2 signature algorithm needs pre-process */
++	if (EVP_MD_type(md) != NID_sm3WithSM2Encryption) {
++		return 2;
++	}
++
++	/* Is it SM2 curve? */
++	group = EC_KEY_get0_group(x);
++	if (EC_GROUP_get_curve_name(group) != NID_sm2) {
++		return 2;
++	}
++
++	if (SM2_sign_pre_process(x, Z))
++		return -1;
++
++	if (!EVP_DigestSignUpdate(ctx, Z, SM3_DIGEST_LENGTH)) {
++		return -1;
++	}
++#endif
++
++	return 2;
++}
++
+ const EVP_PKEY_ASN1_METHOD eckey_asn1_meth = 
+ 	{
+ 	EVP_PKEY_EC,
+@@ -656,5 +722,7 @@
+ 	int_ec_free,
+ 	ec_pkey_ctrl,
+ 	old_ec_priv_decode,
+-	old_ec_priv_encode
++	old_ec_priv_encode,
++	eckey_item_verify,
++	eckey_item_sign
+ 	};
+Index: openssl-1.0.1e/crypto/ec/ec_pmeth.c
+===================================================================
+--- openssl-1.0.1e/crypto/ec/ec_pmeth.c	(revision 22741)
++++ openssl-1.0.1e/crypto/ec/ec_pmeth.c	(working copy)
+@@ -126,7 +126,7 @@
+ 
+ 	if (!sig)
+ 		{
+-		*siglen = ECDSA_size(ec);
++		*siglen = ECDSA_size(ec);	/* SM2_size(ec) */
+ 		return 1;
+ 		}
+ 	else if(*siglen < (size_t)ECDSA_size(ec))
+@@ -140,9 +140,15 @@
+ 	else
+ 		type = NID_sha1;
+ 
+-
++#ifndef OPENSSL_NO_SM2
++	if (type == NID_sm3WithSM2Encryption)
++		ret = SM2_sign(type, tbs, tbslen, sig, &sltmp, ec);
++	else
++#endif
+ 	ret = ECDSA_sign(type, tbs, tbslen, sig, &sltmp, ec);
+-
++#ifdef SM2_TEST
++	sm2_hexdump("signature result", sig, sltmp);
++#endif
+ 	if (ret <= 0)
+ 		return ret;
+ 	*siglen = (size_t)sltmp;
+@@ -162,6 +168,11 @@
+ 	else
+ 		type = NID_sha1;
+ 
++#ifndef OPENSSL_NO_SM2
++	if (type == NID_sm3WithSM2Encryption)
++		ret = SM2_verify(type, tbs, tbslen, sig, siglen, ec);
++	else
++#endif
+ 	ret = ECDSA_verify(type, tbs, tbslen, sig, siglen, ec);
+ 
+ 	return ret;
+@@ -222,6 +233,7 @@
+ 		case EVP_PKEY_CTRL_MD:
+ 		if (EVP_MD_type((const EVP_MD *)p2) != NID_sha1 &&
+ 		    EVP_MD_type((const EVP_MD *)p2) != NID_ecdsa_with_SHA1 &&
++		    EVP_MD_type((const EVP_MD *)p2) != NID_sm3WithSM2Encryption &&
+ 		    EVP_MD_type((const EVP_MD *)p2) != NID_sha224 &&
+ 		    EVP_MD_type((const EVP_MD *)p2) != NID_sha256 &&
+ 		    EVP_MD_type((const EVP_MD *)p2) != NID_sha384 &&
+Index: openssl-1.0.1e/crypto/ec/ec_curve.c
+===================================================================
+--- openssl-1.0.1e/crypto/ec/ec_curve.c	(revision 22741)
++++ openssl-1.0.1e/crypto/ec/ec_curve.c	(working copy)
+@@ -704,6 +704,36 @@
+ 	  0x13,0xDD,0x29,0x45,0x5C,0x5C,0x2A,0x3D }
+ 	};
+ 
++static const struct { EC_CURVE_DATA h; unsigned char data[0+32*6]; }
++	_EC_SM2_256 = {
++	{ NID_X9_62_prime_field,0,32,1 },
++	{							/* no seed */
++	  0xFF,0xFF,0xFF,0xFE,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,	/* p */
++	  0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
++	  0x00,0x00,0x00,0x00,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
++	  0xFF,0xFF,
++	  0xFF,0xFF,0xFF,0xFE,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,	/* a */
++	  0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
++	  0x00,0x00,0x00,0x00,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
++	  0xFF,0xFC,
++	  0x28,0xE9,0xFA,0x9E,0x9D,0x9F,0x5E,0x34,0x4D,0x5A,	/* b */
++	  0x9E,0x4B,0xCF,0x65,0x09,0xA7,0xF3,0x97,0x89,0xF5,
++	  0x15,0xAB,0x8F,0x92,0xDD,0xBC,0xBD,0x41,0x4D,0x94,
++	  0x0E,0x93,
++	  0x32,0xC4,0xAE,0x2C,0x1F,0x19,0x81,0x19,0x5F,0x99,	/* x */
++	  0x04,0x46,0x6A,0x39,0xC9,0x94,0x8F,0xE3,0x0B,0xBF,
++	  0xF2,0x66,0x0B,0xE1,0x71,0x5A,0x45,0x89,0x33,0x4C,
++	  0x74,0xC7,
++	  0xBC,0x37,0x36,0xA2,0xF4,0xF6,0x77,0x9C,0x59,0xBD,	/* y */
++	  0xCE,0xE3,0x6B,0x69,0x21,0x53,0xD0,0xA9,0x87,0x7C,
++	  0xC6,0x2A,0x47,0x40,0x02,0xDF,0x32,0xE5,0x21,0x39,
++	  0xF0,0xA0,
++	  0xFF,0xFF,0xFF,0xFE,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,	/* order */
++	  0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0x72,0x03,0xDF,0x6B,
++	  0x21,0xC6,0x05,0x2B,0x53,0xBB,0xF4,0x09,0x39,0xD5,
++	  0x41,0x23 }
++	};
++
+ #ifndef OPENSSL_NO_EC2M
+ 
+ /* characteristic two curves */
+@@ -1867,6 +1897,7 @@
+ #else
+ 	{ NID_X9_62_prime256v1, &_EC_X9_62_PRIME_256V1.h, 0, "X9.62/SECG curve over a 256 bit prime field" },
+ #endif
++	{ NID_sm2, &_EC_SM2_256.h, 0, "SM2 curve over a 256 bit prime field" },
+ #ifndef OPENSSL_NO_EC2M
+ 	/* characteristic two field curves */
+ 	/* NIST/SECG curves */
+Index: openssl-1.0.1e/crypto/sm2/sm2_vrf.c
+===================================================================
+--- openssl-1.0.1e/crypto/sm2/sm2_vrf.c	(revision 0)
++++ openssl-1.0.1e/crypto/sm2/sm2_vrf.c	(revision 0)
+@@ -0,0 +1,40 @@
++/* crypto/sm2/sm2_vrf.c */
++
++#include "sm2_locl.h"
++#ifndef OPENSSL_NO_ENGINE
++#include <openssl/engine.h>
++#endif
++
++/* returns
++ *      1: correct signature
++ *      0: incorrect signature
++ *     -1: error
++ */
++int SM2_do_verify(const unsigned char *dgst, int dgst_len, 
++		const SM2_SIG *sig, EC_KEY *eckey)
++	{
++	SM2_DATA *sm2 = sm2_check(eckey);
++	if (sm2 == NULL)
++		return 0;
++	return sm2->meth->sm2_do_verify(dgst, dgst_len, sig, eckey);
++	}
++
++/* returns
++ *      1: correct signature
++ *      0: incorrect signature
++ *     -1: error
++ */
++int SM2_verify(int type, const unsigned char *dgst, int dgst_len,
++		const unsigned char *sigbuf, int sig_len, EC_KEY *eckey)
++ 	{
++	SM2_SIG *s;
++	int ret=-1;
++
++	s = SM2_SIG_new();
++	if (s == NULL) return(ret);
++	if (d2i_SM2_SIG(&s, &sigbuf, sig_len) == NULL) goto err;
++	ret=SM2_do_verify(dgst, dgst_len, s, eckey);
++err:
++	SM2_SIG_free(s);
++	return(ret);
++	}
+
+Property changes on: openssl-1.0.1e/crypto/sm2/sm2_vrf.c
+___________________________________________________________________
+Added: svn:executable
+   + *
+
+Index: openssl-1.0.1e/crypto/sm2/sm2_locl.h
+===================================================================
+--- openssl-1.0.1e/crypto/sm2/sm2_locl.h	(revision 0)
++++ openssl-1.0.1e/crypto/sm2/sm2_locl.h	(revision 0)
+@@ -0,0 +1,63 @@
++/* crypto/sm2/sm2_locl.h */
++
++#ifndef HEADER_SM2_LOCL_H
++#define HEADER_SM2_LOCL_H
++
++#include <openssl/sm2.h>
++
++#ifdef  __cplusplus
++extern "C" {
++#endif
++
++struct sm2_method 
++	{
++	const char *name;
++	SM2_SIG *(*sm2_do_sign)(const unsigned char *dgst, int dgst_len, 
++			const BIGNUM *inv, const BIGNUM *rp, EC_KEY *eckey);
++	int (*sm2_sign_setup)(EC_KEY *eckey, BN_CTX *ctx, BIGNUM **kinv, 
++			BIGNUM **r);
++	int (*sm2_do_verify)(const unsigned char *dgst, int dgst_len, 
++			const SM2_SIG *sig, EC_KEY *eckey);
++	int (*sm2_do_encrypt)(int flen, const unsigned char *from,
++			   unsigned char *to, EC_KEY *eckey);
++	int (*sm2_do_decrypt)(int flen, const unsigned char *from,
++			   unsigned char *to, EC_KEY *eckey);
++#if 0
++	int (*init)(EC_KEY *eckey);
++	int (*finish)(EC_KEY *eckey);
++#endif
++	int flags;
++	char *app_data;
++	};
++
++/* If this flag is set the SM2 method is FIPS compliant and can be used
++ * in FIPS mode. This is set in the validated module method. If an
++ * application sets this flag in its own methods it is its responsibility
++ * to ensure the result is compliant.
++ */
++
++#define SM2_FLAG_FIPS_METHOD	0x1
++
++typedef struct sm2_data_st {
++	/* EC_KEY_METH_DATA part */
++	int (*init)(EC_KEY *);
++	/* method (SM2) specific part */
++	ENGINE	*engine;
++	int	flags;
++	const SM2_METHOD *meth;
++	CRYPTO_EX_DATA ex_data;
++} SM2_DATA;
++
++/** sm2_check
++ * checks whether ECKEY->meth_data is a pointer to a SM2_DATA structure
++ * and if not it removes the old meth_data and creates a SM2_DATA structure.
++ * \param  eckey pointer to a EC_KEY object
++ * \return pointer to a SM2_DATA structure
++ */
++SM2_DATA *sm2_check(EC_KEY *eckey);
++
++#ifdef  __cplusplus
++}
++#endif
++
++#endif /* HEADER_ECS_LOCL_H */
+
+Property changes on: openssl-1.0.1e/crypto/sm2/sm2_locl.h
+___________________________________________________________________
+Added: svn:executable
+   + *
+
+Index: openssl-1.0.1e/crypto/sm2/sm2_sign.c
+===================================================================
+--- openssl-1.0.1e/crypto/sm2/sm2_sign.c	(revision 0)
++++ openssl-1.0.1e/crypto/sm2/sm2_sign.c	(revision 0)
+@@ -0,0 +1,132 @@
++/* crypto/sm2/sm2_sign.c */
++
++#include "sm2_locl.h"
++#ifndef OPENSSL_NO_ENGINE
++#include <openssl/engine.h>
++#endif
++#include <openssl/rand.h>
++#include <openssl/sm3.h>
++
++/*
++ * Output Z, return length of Z
++ */
++int SM2_sign_pre_process(const EC_KEY *ec, unsigned char *Z)
++	{
++	int     ret=-1, reason=ERR_R_BIO_LIB;
++	const EC_GROUP *group;
++	const EC_POINT *pub;
++
++#define ID_LEN	16
++	unsigned char lenAndID[ID_LEN + 2] = { \
++		0x00, 0x80,
++		0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38,\
++		0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38
++	};
++	const EC_POINT *point=NULL;
++	BIGNUM *a = BN_new();
++	BIGNUM *b = BN_new();
++	BIGNUM *x = BN_new();
++	BIGNUM *y = BN_new();
++	BN_CTX  *bctx = BN_CTX_new();
++	unsigned char *buff = NULL;
++	int len;
++	SM3_CTX c;
++
++	group = EC_KEY_get0_group(ec);
++	pub = EC_KEY_get0_public_key(ec);
++
++	if (!a || !b || !x || !y || !bctx)
++		{
++		reason = ERR_R_MALLOC_FAILURE;
++		goto err;
++		}
++
++	if (!EC_GROUP_get_curve_GFp(group, NULL, a, b, bctx))
++		{
++		reason = ERR_R_EC_LIB;
++		goto err;
++		}
++	if ((point = EC_GROUP_get0_generator(group)) == NULL)
++		{
++		reason = ERR_R_EC_LIB;
++		goto err;
++		}
++
++	buff = OPENSSL_malloc(SM2_size(ec));
++	if (!buff)	{
++		reason = ERR_R_MALLOC_FAILURE;
++		goto err;
++	}
++
++	SM3_Init(&c);
++	SM3_Update(&c, lenAndID, ID_LEN+2);
++	len = BN_bn2bin(a, buff);	SM3_Update(&c, buff, len);
++	len = BN_bn2bin(b, buff);	SM3_Update(&c, buff, len);
++	EC_POINT_get_affine_coordinates_GFp(group, point, x, y, NULL);
++	len = BN_bn2bin(x, buff);	SM3_Update(&c, buff, len);
++	len = BN_bn2bin(y, buff);	SM3_Update(&c, buff, len);
++	EC_POINT_get_affine_coordinates_GFp(group, pub, x, y, NULL);
++	len = BN_bn2bin(x, buff);	SM3_Update(&c, buff, len);
++	len = BN_bn2bin(y, buff);	SM3_Update(&c, buff, len);
++	SM3_Final(Z, &c);
++	OPENSSL_cleanse(&c, sizeof(c)); /* security consideration */
++
++	ret = 0;
++
++err:
++	if (!ret)
++ 		ECerr(EC_F_DO_EC_KEY_PRINT, reason);
++	if (bctx)
++		BN_CTX_free(bctx);
++	if (a) BN_free(a);
++	if (b) BN_free(b);
++	if (x) BN_free(x);
++	if (y) BN_free(y);
++	if (buff) OPENSSL_free(buff);
++	return ret;
++	}
++
++SM2_SIG *SM2_do_sign_ex(const unsigned char *dgst, int dlen,
++	const BIGNUM *kinv, const BIGNUM *rp, EC_KEY *eckey)
++{
++	SM2_DATA *sm2 = sm2_check(eckey);
++	if (sm2 == NULL)
++		return NULL;
++	return sm2->meth->sm2_do_sign(dgst, dlen, kinv, rp, eckey);
++}
++
++SM2_SIG *SM2_do_sign(const unsigned char *dgst, int dlen, EC_KEY *eckey)
++{
++	return SM2_do_sign_ex(dgst, dlen, NULL, NULL, eckey);
++}
++
++int SM2_sign_ex(int type, const unsigned char *dgst, int dlen, unsigned char 
++	*sig, unsigned int *siglen, const BIGNUM *kinv, const BIGNUM *r, 
++	EC_KEY *eckey)
++{
++	SM2_SIG *s;
++	RAND_seed(dgst, dlen);
++	s = SM2_do_sign_ex(dgst, dlen, kinv, r, eckey);
++	if (s == NULL) {
++		*siglen=0;
++		return 0;
++	}
++	*siglen = i2d_SM2_SIG(s, &sig);
++	SM2_SIG_free(s);
++	return 1;
++}
++
++int SM2_sign(int type, const unsigned char *dgst, int dlen, unsigned char 
++		*sig, unsigned int *siglen, EC_KEY *eckey)
++{
++	return SM2_sign_ex(type, dgst, dlen, sig, siglen, NULL, NULL, eckey);
++}
++
++int SM2_sign_setup(EC_KEY *eckey, BN_CTX *ctx_in, BIGNUM **kinvp, 
++		BIGNUM **rp)
++{
++	SM2_DATA *sm2 = sm2_check(eckey);
++	if (sm2 == NULL)
++		return 0;
++	return sm2->meth->sm2_sign_setup(eckey, ctx_in, kinvp, rp); 
++}
+
+Property changes on: openssl-1.0.1e/crypto/sm2/sm2_sign.c
+___________________________________________________________________
+Added: svn:executable
+   + *
+
+Index: openssl-1.0.1e/crypto/sm2/sm2test.c
+===================================================================
+--- openssl-1.0.1e/crypto/sm2/sm2test.c	(revision 0)
++++ openssl-1.0.1e/crypto/sm2/sm2test.c	(revision 0)
+@@ -0,0 +1,324 @@
++/* crypto/sm2/sm2test.c */
++
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++
++#include <openssl/opensslconf.h> /* To see if OPENSSL_NO_SM2 is defined */
++
++#ifdef OPENSSL_NO_SM2
++int main(int argc, char * argv[])
++	{
++	puts("Elliptic curves are disabled.");
++	return 0;
++	}
++#else
++
++#include <openssl/crypto.h>
++#include <openssl/bio.h>
++#include <openssl/evp.h>
++#include <openssl/bn.h>
++#include <openssl/ec.h>
++#include <openssl/sm2.h>
++#include <openssl/sm3.h>
++#ifndef OPENSSL_NO_ENGINE
++#include <openssl/engine.h>
++#endif
++#include <openssl/err.h>
++#include <openssl/rand.h>
++
++static const char rnd_seed[] = "string to make the random number generator "
++	"think it has entropy";
++
++RAND_METHOD	fake_rand;
++const RAND_METHOD *old_rand;
++
++static int fbytes_counter = 0;
++static const char *numbers[4] = {
++	"3945208F7B2144B13F36E38AC6D39F95889393692860B51A42FB81EF4DF7C5B8",
++	"59276E27D506861A16680F3AD9C02DCCEF3CC1FA3CDBE4CE6D54B80DEAC1BC21",
++	"3945208F7B2144B13F36E38AC6D39F95889393692860B51A42FB81EF4DF7C5B8",
++	"59276E27D506861A16680F3AD9C02DCCEF3CC1FA3CDBE4CE6D54B80DEAC1BC21"
++	};
++
++static int _fbytes(unsigned char *buf, int num)
++	{
++	int	ret;
++	BIGNUM	*tmp = NULL;
++
++	if (fbytes_counter >= 4)
++		return 0;
++	tmp = BN_new();
++	if (!tmp)
++		return 0;
++	if (!BN_hex2bn(&tmp, numbers[fbytes_counter]))
++		{
++		BN_free(tmp);
++		return 0;
++		}
++	//printf("counter:%d, size:%d, num:%d\n", fbytes_counter, BN_num_bytes(tmp), num);
++	fbytes_counter ++;
++	if (num != BN_num_bytes(tmp) || !BN_bn2bin(tmp, buf))
++		ret = 0;
++	else 
++		ret = 1;
++	if (tmp)
++		BN_free(tmp);
++	return ret;
++	}
++
++/* functions to change the RAND_METHOD */
++static int sm2_change_rand(void)
++	{
++	/* save old rand method */
++	if ((old_rand = RAND_get_rand_method()) == NULL)
++		return 0;
++
++	fake_rand.seed    = old_rand->seed;
++	fake_rand.cleanup = old_rand->cleanup;
++	fake_rand.add     = old_rand->add;
++	fake_rand.status  = old_rand->status;
++	/* use own random function */
++	fake_rand.bytes      = _fbytes;
++	fake_rand.pseudorand = old_rand->bytes;
++	/* set new RAND_METHOD */
++	if (!RAND_set_rand_method(&fake_rand))
++		return 0;
++	return 1;
++	}
++
++static int sm2_restore_rand(void)
++	{
++	if (!RAND_set_rand_method(old_rand))
++		return 0;
++	else
++		return 1;
++	}
++
++static const char Z_exp[] = {
++	"B2E14C5C79C6DF5B85F4FE7ED8DB7A262B9DA7E07CCB0EA9F4747B8CCDA8A4F3"
++};
++static const char Dgst_exp[] = {
++	"F0B43E94BA45ACCAACE692ED534382EB17E6AB5A19CE7B31F4486FDFC0D28640"
++};
++static const char *sig_exp[2] = {
++	"F5A03B0648D2C4630EEAC513E1BB81A15944DA3827D5B74143AC7EACEEE720B3",
++	"B1B6AA29DF212FD8763182BC0D421CA1BB9038FD1F7F42D4840B69C485BBC1AA"
++};
++
++static void hex2str(const unsigned char *val, int len, char *to)
++{
++	int i, k = 0;
++	for(i=0; i<len; i++)
++		k += sprintf(to+k, "%02X", val[i]);
++	to[k] = 0;
++}
++
++static int sm2_sign_test(BIO *out)
++	{
++	int	ret = 0;
++	int nid = NID_sm2;
++	const char message[] = "message digest";
++	unsigned char Z[SM3_DIGEST_LENGTH] = {0,};
++	unsigned char digest[SM3_DIGEST_LENGTH];
++	unsigned int  dgst_len = 0;
++	EVP_MD_CTX md_ctx;
++	EC_KEY    *key = NULL;
++	SM2_SIG *signature = NULL;
++	char res[64], *sig_r = NULL, *sig_s = NULL;
++
++	/* create the key */
++	if ((key = EC_KEY_new_by_curve_name(nid)) == NULL) {
++		BIO_printf(out, "create EC_KEY ");
++		goto err;
++	}
++	if (!EC_KEY_generate_key(key)) {
++		BIO_printf(out, "generate key ");
++		goto err;
++	}
++
++	/* pre-process: compute Z_A */
++	if (SM2_sign_pre_process(key, Z)) {
++		BIO_printf(out, "sign pre-process ");
++		goto err;
++	}
++
++	hex2str(Z, SM3_DIGEST_LENGTH, res);
++	if (strcmp(res, Z_exp)) {
++		BIO_printf(out, "Z_A:  %s\n", res);
++		BIO_printf(out, "Exp:  %s\n", Z_exp);
++		BIO_printf(out, "Compute Z ");
++		goto err;
++	}
++
++	EVP_MD_CTX_init(&md_ctx);
++	/* get the message digest */
++	EVP_DigestInit(&md_ctx, EVP_sm3_sm2());
++	EVP_DigestUpdate(&md_ctx, Z, SM3_DIGEST_LENGTH);
++	EVP_DigestUpdate(&md_ctx, (const void*)message, strlen(message));
++	EVP_DigestFinal(&md_ctx, digest, &dgst_len);
++
++	hex2str(digest, dgst_len, res);
++	if (strcmp(res, Dgst_exp)) {
++		BIO_printf(out, "Dgst: %s\n", res);
++		BIO_printf(out, "Exp:  %s\n", Dgst_exp);
++		BIO_printf(out, "digest ");
++		goto err;
++	}
++
++	/* create the signature */
++	signature = SM2_do_sign(digest, dgst_len, key);
++	if (signature == NULL)
++		goto err;
++	sig_r = BN_bn2hex(signature->r);
++	sig_s = BN_bn2hex(signature->s);
++	if (strcmp(sig_r, sig_exp[0]) || strcmp(sig_s, sig_exp[1])) {
++		BIO_printf(out, "sig_r:%s\n", sig_r);
++		BIO_printf(out, "Exp:  %s\n", sig_exp[0]);
++		BIO_printf(out, "sig_s:%s\n", sig_s);
++		BIO_printf(out, "Exp:  %s\n", sig_exp[1]);
++		BIO_printf(out, "signature ");
++		goto err;
++	}
++
++	/* verify the signature */
++	if (SM2_do_verify(digest, 32, signature, key) != 1)
++		goto err;
++
++	BIO_printf(out, "test sign and verify ok\n\n");
++	ret = 1;
++err:
++	if (!ret)
++		BIO_printf(out, " failed\n\n");
++	if (sig_r)	OPENSSL_free(sig_r);
++	if (sig_s)	OPENSSL_free(sig_s);
++	if (key)
++		EC_KEY_free(key);
++	if (signature)
++		SM2_SIG_free(signature);
++	EVP_MD_CTX_cleanup(&md_ctx);
++
++	return ret;
++	}
++
++int sm2_crypt_test(BIO *out)
++	{
++	int	ret = 0;
++	int nid = NID_sm2;
++#define MSG_LEN	19
++	/* "encryption standard" */
++	const unsigned char message[MSG_LEN] = { \
++		0x65,0x6E,0x63,0x72,0x79,0x70,0x74,0x69, \
++		0x6F,0x6E,0x20,0x73,0x74,0x61,0x6E,0x64, \
++		0x61,0x72,0x64 \
++		};
++	unsigned char *c = NULL;
++	unsigned char *p = NULL;
++	int len, n;
++	EC_KEY    *key = NULL;
++
++	/* create the key */
++	if ((key = EC_KEY_new_by_curve_name(nid)) == NULL) {
++		BIO_printf(out, "create EC_KEY failed");
++		goto err;
++	}
++	if (!EC_KEY_generate_key(key)) {
++		BIO_printf(out, "generate key failed");
++		goto err;
++	}
++
++	len = EC_GROUP_get_degree(EC_KEY_get0_group(key)) / 8;
++	n = 1 + 2 * len + MSG_LEN + SM3_DIGEST_LENGTH;
++	c = OPENSSL_malloc(n + 1);
++	/* encrypt  */
++	len = SM2_encrypt(MSG_LEN, message, c, key);
++	if (len <= 0) {
++		BIO_printf(out, "encrypt failed\n");
++		goto err;
++	}
++
++	p = OPENSSL_malloc(MSG_LEN + 1);
++	/* decrypt */
++	len = SM2_decrypt(len, c, p, key);
++	if (len <= 0) {
++		BIO_printf(out, "decrypt failed\n");
++		goto err;
++	}
++
++	if (memcmp(message, p, MSG_LEN)) {
++		char res[512];
++		hex2str(c, len, res);
++		BIO_printf(out, "cipher:\n%s\n", res);
++		hex2str(p, len, res);
++		BIO_printf(out, "out-plain:\n%s\n", res);
++		hex2str(message, len, res);
++		BIO_printf(out, "in-plain:\n%s\n", res);
++		BIO_printf(out, "test encrypt and decrypt failed\n");
++		goto err;
++	}
++
++	BIO_printf(out, "test encrypt and decrypt ok\n");
++	ret = 1;
++err:
++	if (key)
++		EC_KEY_free(key);
++
++	if (c) OPENSSL_free(c);
++	if (p) OPENSSL_free(p);
++
++	return ret;
++	}
++
++int main(void)
++	{
++	int 	ret = 1;
++	BIO	*out;
++
++	out = BIO_new_fp(stdout, BIO_NOCLOSE);
++	
++	/* enable memory leak checking unless explicitly disabled */
++	if (!((getenv("OPENSSL_DEBUG_MEMORY") != NULL) && 
++		(0 == strcmp(getenv("OPENSSL_DEBUG_MEMORY"), "off"))))
++		{
++		CRYPTO_malloc_debug_init();
++		CRYPTO_set_mem_debug_options(V_CRYPTO_MDEBUG_ALL);
++		}
++	else
++		{
++		/* OPENSSL_DEBUG_MEMORY=off */
++		CRYPTO_set_mem_debug_functions(0, 0, 0, 0, 0);
++		}
++	CRYPTO_mem_ctrl(CRYPTO_MEM_CHECK_ON);
++
++	ERR_load_crypto_strings();
++
++	/* initialize the prng */
++	RAND_seed(rnd_seed, sizeof(rnd_seed));
++
++	/* set own rand method */
++	if (!sm2_change_rand())
++		goto err;
++
++	/* the tests */
++	if (!sm2_sign_test(out))  goto err;
++	if (!sm2_crypt_test(out)) goto err;
++	
++	ret = 0;
++err:	
++	sm2_restore_rand();
++
++	if (ret) 	
++		BIO_printf(out, "\nSM2 test failed\n");
++	else 
++		BIO_printf(out, "\nSM2 test passed\n");
++	if (ret)
++		ERR_print_errors(out);
++	CRYPTO_cleanup_all_ex_data();
++	ERR_remove_thread_state(NULL);
++	ERR_free_strings();
++	CRYPTO_mem_leaks(out);
++	if (out != NULL)
++		BIO_free(out);
++	return ret;
++	}	
++#endif
+
+Property changes on: openssl-1.0.1e/crypto/sm2/sm2test.c
+___________________________________________________________________
+Added: svn:executable
+   + *
+
+Index: openssl-1.0.1e/crypto/sm2/sm2_ossl.c
+===================================================================
+--- openssl-1.0.1e/crypto/sm2/sm2_ossl.c	(revision 0)
++++ openssl-1.0.1e/crypto/sm2/sm2_ossl.c	(revision 0)
+@@ -0,0 +1,759 @@
++/* crypto/sm2/sm2_ossl.c */
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++
++#include "sm2_locl.h"
++#include <openssl/err.h>
++#include <openssl/obj_mac.h>
++#include <openssl/bn.h>
++#include <openssl/rand.h>
++#include <openssl/sm3.h>
++
++static int sm2_sign_setup(EC_KEY *eckey, BN_CTX *ctx_in, BIGNUM **kinvp,
++		BIGNUM **rp)
++{
++	BN_CTX   *ctx = NULL;
++	BIGNUM	 *k = NULL, *r = NULL, *order = NULL, *X = NULL;
++	EC_POINT *tmp_point=NULL;
++	const EC_GROUP *group;
++	int 	 ret = 0;
++
++	if (eckey == NULL || (group = EC_KEY_get0_group(eckey)) == NULL)
++	{
++		SM2err(SM2_F_SM2_SIGN_SETUP, ERR_R_PASSED_NULL_PARAMETER);
++		return 0;
++	}
++
++	if (ctx_in == NULL) {
++		if ((ctx = BN_CTX_new()) == NULL)
++		{
++			SM2err(SM2_F_SM2_SIGN_SETUP,ERR_R_MALLOC_FAILURE);
++			return 0;
++		}
++	}
++	else
++		ctx = ctx_in;
++
++	k     = BN_new();	/* this value is later returned in *kinvp */
++	r     = BN_new();	/* this value is later returned in *rp    */
++	order = BN_new();
++	X     = BN_new();
++	if (!k || !r || !order || !X)
++	{
++		SM2err(SM2_F_SM2_SIGN_SETUP, ERR_R_MALLOC_FAILURE);
++		goto err;
++	}
++	if ((tmp_point = EC_POINT_new(group)) == NULL)
++	{
++		SM2err(SM2_F_SM2_SIGN_SETUP, ERR_R_EC_LIB);
++		goto err;
++	}
++	if (!EC_GROUP_get_order(group, order, ctx))
++	{
++		SM2err(SM2_F_SM2_SIGN_SETUP, ERR_R_EC_LIB);
++		goto err;
++	}
++	
++	do
++	{
++		/* get random k */	
++		do
++			if (!BN_rand_range(k, order))
++			{
++				SM2err(SM2_F_SM2_SIGN_SETUP,
++				 SM2_R_RANDOM_NUMBER_GENERATION_FAILED);	
++				goto err;
++			}
++		while (BN_is_zero(k));
++
++		/* compute r the x-coordinate of generator * k */
++		if (!EC_POINT_mul(group, tmp_point, k, NULL, NULL, ctx))
++		{
++			SM2err(SM2_F_SM2_SIGN_SETUP, ERR_R_EC_LIB);
++			goto err;
++		}
++		if (EC_METHOD_get_field_type(EC_GROUP_method_of(group)) == NID_X9_62_prime_field)
++		{
++			if (!EC_POINT_get_affine_coordinates_GFp(group,
++				tmp_point, X, NULL, ctx))
++			{
++				SM2err(SM2_F_SM2_SIGN_SETUP,ERR_R_EC_LIB);
++				goto err;
++			}
++		}
++#ifndef OPENSSL_NO_EC2M
++		else /* NID_X9_62_characteristic_two_field */
++		{
++			if (!EC_POINT_get_affine_coordinates_GF2m(group,
++				tmp_point, X, NULL, ctx))
++			{
++				SM2err(SM2_F_SM2_SIGN_SETUP,ERR_R_EC_LIB);
++				goto err;
++			}
++		}
++#endif
++		if (!BN_nnmod(r, X, order, ctx))
++		{
++			SM2err(SM2_F_SM2_SIGN_SETUP, ERR_R_BN_LIB);
++			goto err;
++		}
++	}
++	while (BN_is_zero(r));
++
++	/* compute the inverse of k */
++/*	if (!BN_mod_inverse(k, k, order, ctx))
++	{
++		SM2err(SM2_F_SM2_SIGN_SETUP, ERR_R_BN_LIB);
++		goto err;	
++	}
++*/	/* clear old values if necessary */
++	if (*rp != NULL)
++		BN_clear_free(*rp);
++	if (*kinvp != NULL) 
++		BN_clear_free(*kinvp);
++	/* save the pre-computed values  */
++	*rp    = r;
++	*kinvp = k;
++	ret = 1;
++err:
++	if (!ret)
++	{
++		if (k != NULL) BN_clear_free(k);
++		if (r != NULL) BN_clear_free(r);
++	}
++	if (ctx_in == NULL) 
++		BN_CTX_free(ctx);
++	if (order != NULL)
++		BN_free(order);
++	if (tmp_point != NULL) 
++		EC_POINT_free(tmp_point);
++	if (X)
++		BN_clear_free(X);
++	return(ret);
++}
++
++
++static SM2_SIG *sm2_do_sign(const unsigned char *dgst, int dgst_len, 
++		const BIGNUM *in_kinv, const BIGNUM *in_r, EC_KEY *eckey)
++{
++	int     ok = 0, i;
++	BIGNUM *kinv=NULL, *s, *m=NULL,*tmp=NULL,*order=NULL;
++	const BIGNUM *ckinv;
++	BN_CTX     *ctx = NULL;
++	const EC_GROUP   *group;
++	SM2_SIG  *ret;
++	const BIGNUM *priv_key;
++	BIGNUM *r,*x=NULL,*a=NULL;	//new added
++
++	group    = EC_KEY_get0_group(eckey);
++	priv_key = EC_KEY_get0_private_key(eckey);
++
++	if (group == NULL || priv_key == NULL) {
++		SM2err(SM2_F_SM2_DO_SIGN, ERR_R_PASSED_NULL_PARAMETER);
++		return NULL;
++	}
++
++	ret = SM2_SIG_new();
++	if (!ret) {
++		SM2err(SM2_F_SM2_DO_SIGN, ERR_R_MALLOC_FAILURE);
++		return NULL;
++	}
++	s = ret->s;
++	r = ret->r;
++
++	if ((ctx = BN_CTX_new()) == NULL || (order = BN_new()) == NULL ||
++		(tmp = BN_new()) == NULL || (m = BN_new()) == NULL || 
++		(x = BN_new()) == NULL || (a = BN_new()) == NULL)
++	{
++		SM2err(SM2_F_SM2_DO_SIGN, ERR_R_MALLOC_FAILURE);
++		goto err;
++	}
++
++	if (!EC_GROUP_get_order(group, order, ctx))
++	{
++		SM2err(SM2_F_SM2_DO_SIGN, ERR_R_EC_LIB);
++		goto err;
++	}
++	i = BN_num_bits(order);
++	/* Need to truncate digest if it is too long: first truncate whole
++	 * bytes.
++	 */
++	if (8 * dgst_len > i)
++		dgst_len = (i + 7)/8;
++	if (!BN_bin2bn(dgst, dgst_len, m))
++	{
++		SM2err(SM2_F_SM2_DO_SIGN, ERR_R_BN_LIB);
++		goto err;
++	}
++	/* If still too long truncate remaining bits with a shift */
++	if ((8 * dgst_len > i) && !BN_rshift(m, m, 8 - (i & 0x7)))
++	{
++		SM2err(SM2_F_SM2_DO_SIGN, ERR_R_BN_LIB);
++		goto err;
++	}
++	do
++	{
++		if (in_kinv == NULL || in_r == NULL)
++		{
++			if (!sm2_sign_setup(eckey, ctx, &kinv, &x))
++			{
++				SM2err(SM2_F_SM2_DO_SIGN,ERR_R_EC_LIB);
++				goto err;
++			}
++			ckinv = kinv;
++		}
++		else
++		{
++			ckinv  = in_kinv;
++			if (BN_copy(x, in_r) == NULL)
++			{
++				SM2err(SM2_F_SM2_DO_SIGN, ERR_R_MALLOC_FAILURE);
++				goto err;
++			}
++		}
++		/* r=(e+x1) mod n */
++		if (!BN_mod_add_quick(r, m, x, order))
++		{
++			SM2err(SM2_F_SM2_DO_SIGN, ERR_R_BN_LIB);
++			goto err;
++		}
++
++		if(BN_is_zero(r) )
++			continue;
++		BN_add(tmp,r,ckinv);
++		if (BN_ucmp(tmp,order) == 0)
++			continue;
++		if (!BN_mod_mul(tmp, priv_key, r, order, ctx))
++		{
++			SM2err(SM2_F_SM2_DO_SIGN, ERR_R_BN_LIB);
++			goto err;
++		}
++		if (!BN_mod_sub_quick(s, ckinv, tmp, order))
++		{
++			SM2err(SM2_F_SM2_DO_SIGN, ERR_R_BN_LIB);
++			goto err;
++		}
++		BN_one(a);
++
++		if (!BN_mod_add_quick(tmp, priv_key, a, order))
++		{
++			SM2err(SM2_F_SM2_DO_SIGN, ERR_R_BN_LIB);
++			goto err;
++		}
++		/* compute the inverse of 1+dA */
++		if (!BN_mod_inverse(tmp, tmp, order, ctx))
++		{
++			SM2err(SM2_F_SM2_SIGN_SETUP, ERR_R_BN_LIB);
++			goto err;	
++		}
++		if (!BN_mod_mul(s, s, tmp, order, ctx))
++		{
++			SM2err(SM2_F_SM2_DO_SIGN, ERR_R_BN_LIB);
++			goto err;
++		}
++		if (BN_is_zero(s))
++		{
++			/* if kinv and r have been supplied by the caller
++			 * don't to generate new kinv and r values */
++			if (in_kinv != NULL && in_r != NULL)
++			{
++				SM2err(SM2_F_SM2_DO_SIGN, SM2_R_NEED_NEW_SETUP_VALUES);
++				goto err;
++			}
++		}
++		else
++			/* s != 0 => we have a valid signature */
++			break;
++	} while (1);
++
++	ok = 1;
++err:
++	if (!ok)
++	{
++		SM2_SIG_free(ret);
++		ret = NULL;
++	}
++	if (ctx)
++		BN_CTX_free(ctx);
++	if (m)
++		BN_clear_free(m);
++	if (tmp)
++		BN_clear_free(tmp);
++	if (order)
++		BN_free(order);
++	if (kinv)
++		BN_clear_free(kinv);
++	if (x)
++		BN_clear_free(x);
++	if (a)
++		BN_clear_free(a);
++	return ret;
++}
++
++static int sm2_do_verify(const unsigned char *dgst, int dgst_len,
++		const SM2_SIG *sig, EC_KEY *eckey)
++{
++	int ret = -1, i;
++	BN_CTX   *ctx;
++	BIGNUM   *order, *R,  *m, *X, *t;
++	EC_POINT *point = NULL;
++	const EC_GROUP *group;
++	const EC_POINT *pub_key;
++
++	/* check input values */
++	if (eckey == NULL || (group = EC_KEY_get0_group(eckey)) == NULL ||
++	    (pub_key = EC_KEY_get0_public_key(eckey)) == NULL || sig == NULL)
++	{
++		SM2err(SM2_F_SM2_DO_VERIFY, SM2_R_MISSING_PARAMETERS);
++		return -1;
++	}
++
++	ctx = BN_CTX_new();
++	if (!ctx)
++	{
++		SM2err(SM2_F_SM2_DO_VERIFY, ERR_R_MALLOC_FAILURE);
++		return -1;
++	}
++	BN_CTX_start(ctx);
++	order = BN_CTX_get(ctx);	
++	R    = BN_CTX_get(ctx);
++	t    = BN_CTX_get(ctx);
++	m     = BN_CTX_get(ctx);
++	X     = BN_CTX_get(ctx);
++	if (!X)
++	{
++		SM2err(SM2_F_SM2_DO_VERIFY, ERR_R_BN_LIB);
++		goto err;
++	}
++	
++	if (!EC_GROUP_get_order(group, order, ctx))
++	{
++		SM2err(SM2_F_SM2_DO_VERIFY, ERR_R_EC_LIB);
++		goto err;
++	}
++
++	if (BN_is_zero(sig->r)          || BN_is_negative(sig->r) || 
++	    BN_ucmp(sig->r, order) >= 0 || BN_is_zero(sig->s)  ||
++	    BN_is_negative(sig->s)      || BN_ucmp(sig->s, order) >= 0)
++	{
++		SM2err(SM2_F_SM2_DO_VERIFY, SM2_R_BAD_SIGNATURE);
++		ret = 0;	/* signature is invalid */
++		goto err;
++	}
++
++	//t =(r+s) mod n
++	if (!BN_mod_add_quick(t, sig->s, sig->r,order))
++	{
++		SM2err(SM2_F_SM2_DO_VERIFY, ERR_R_BN_LIB);
++		goto err;
++	}
++	if (BN_is_zero(t))
++	{
++		SM2err(SM2_F_SM2_DO_VERIFY, SM2_R_BAD_SIGNATURE);
++		ret = 0;	/* signature is invalid */
++		goto err;
++	}
++	
++	//point = s*G+t*PA
++	if ((point = EC_POINT_new(group)) == NULL)
++	{
++		SM2err(SM2_F_SM2_DO_VERIFY, ERR_R_MALLOC_FAILURE);
++		goto err;
++	}
++	if (!EC_POINT_mul(group, point, sig->s, pub_key, t, ctx))
++	{
++		SM2err(SM2_F_SM2_DO_VERIFY, ERR_R_EC_LIB);
++		goto err;
++	}
++	if (EC_METHOD_get_field_type(EC_GROUP_method_of(group)) == NID_X9_62_prime_field)
++	{
++		if (!EC_POINT_get_affine_coordinates_GFp(group,
++			point, X, NULL, ctx))
++		{
++			SM2err(SM2_F_SM2_DO_VERIFY, ERR_R_EC_LIB);
++			goto err;
++		}
++	}
++	else /* NID_X9_62_characteristic_two_field */
++	{
++		if (!EC_POINT_get_affine_coordinates_GF2m(group,
++			point, X, NULL, ctx))
++		{
++			SM2err(SM2_F_SM2_DO_VERIFY, ERR_R_EC_LIB);
++			goto err;
++		}
++	}
++ 	
++	i = BN_num_bits(order);
++	/* Need to truncate digest if it is too long: first truncate whole
++	 * bytes.
++	 */
++	if (8 * dgst_len > i)
++		dgst_len = (i + 7)/8;
++	if (!BN_bin2bn(dgst, dgst_len, m))
++	{
++		SM2err(SM2_F_SM2_DO_VERIFY, ERR_R_BN_LIB);
++		goto err;
++	}
++	/* If still too long truncate remaining bits with a shift */
++	if ((8 * dgst_len > i) && !BN_rshift(m, m, 8 - (i & 0x7)))
++	{
++		SM2err(SM2_F_SM2_DO_VERIFY, ERR_R_BN_LIB);
++		goto err;
++	}
++
++	/* R = m + X mod order */
++	if (!BN_mod_add_quick(R, m, X, order))
++	{
++		SM2err(SM2_F_SM2_DO_VERIFY, ERR_R_BN_LIB);
++		goto err;
++	}
++
++	/*  if the signature is correct R is equal to sig->r */
++	ret = (BN_ucmp(R, sig->r) == 0);
++
++err:
++	BN_CTX_end(ctx);
++	BN_CTX_free(ctx);
++	if (point)
++		EC_POINT_free(point);
++
++	return ret;
++}
++
++static void KDF(const unsigned char *share, unsigned int sharelen,
++	unsigned int keylen, unsigned char *outkey)
++{
++	SM3_CTX ctx;
++	unsigned char dgst[SM3_DIGEST_LENGTH] = {0};
++	unsigned char *pp = outkey;
++	unsigned char u_ct[4];
++	unsigned int ct = 1;
++	int rlen = (int)keylen;
++
++	while (rlen > 0) {
++		u_ct[0] = (unsigned char)(ct>>24);
++		u_ct[1] = (unsigned char)(ct>>16);
++		u_ct[2] = (unsigned char)(ct>>8);
++		u_ct[3] = (unsigned char)ct;
++		SM3_Init(&ctx);
++		SM3_Update(&ctx, share, sharelen);
++		SM3_Update(&ctx, u_ct, sizeof(u_ct));
++		SM3_Final(dgst, &ctx);
++		OPENSSL_cleanse(&ctx, sizeof(ctx));
++		++ct;
++		memcpy(pp, dgst, rlen >= SM3_DIGEST_LENGTH ? SM3_DIGEST_LENGTH : rlen);
++
++		rlen -= SM3_DIGEST_LENGTH;
++		pp += SM3_DIGEST_LENGTH;
++	}
++#ifdef SM2_TEST
++	sm2_hexdump("t", outkey, keylen);
++#endif
++}
++
++static int sm2_do_encrypt_ex(unsigned int flen, const unsigned char *from, 
++	unsigned char *to, EC_KEY *eckey, BIGNUM *k_in)
++{
++	const EC_GROUP *group;
++	const EC_POINT *pubkey;
++
++	int xylen = 0, olen, ret = -1;
++	unsigned int i = 0;
++	unsigned char *t = NULL, *temp = NULL;
++	unsigned char *c;
++	SM3_CTX sm3_ctx;
++
++	BN_CTX *ctx = BN_CTX_new();	/* necessary ? */
++	EC_POINT *C1, *S;
++	BIGNUM *order = BN_new();
++	BIGNUM *x = BN_new();
++	BIGNUM *y = BN_new();
++	BIGNUM *h = BN_new();
++	BIGNUM *k = NULL;
++
++	/* check input values */
++	if (eckey == NULL || (group = EC_KEY_get0_group(eckey)) == NULL ||
++	    (pubkey = EC_KEY_get0_public_key(eckey)) == NULL || to == NULL) {
++		SM2err(SM2_F_SM2_DO_ENCRYPT, SM2_R_MISSING_PARAMETERS);
++		return -1;
++	}
++
++	C1 = EC_POINT_new(group);
++	S = EC_POINT_new(group);
++	if (!ctx || !order || !C1 || !x || !y || !h || !S) {
++		SM2err(SM2_F_SM2_DO_ENCRYPT, ERR_R_MALLOC_FAILURE);
++		goto cleanup;
++	}
++
++	if (!EC_GROUP_get_order(group, order, ctx)) {
++		SM2err(SM2_F_SM2_DO_ENCRYPT, ERR_R_EC_LIB);
++		goto cleanup;
++	}
++
++	xylen = EC_GROUP_get_degree(group) / 8;
++	olen = 1 + 2 * xylen + flen + SM3_DIGEST_LENGTH;
++
++	RAND_seed(from, flen);
++	do {
++		if (NULL == k_in) {
++			if (NULL == (k = BN_new())) {
++				SM2err(SM2_F_SM2_DO_ENCRYPT, ERR_R_MALLOC_FAILURE);
++				goto cleanup;
++			}
++			/* generate rand number: k */
++			do {
++				if (!BN_rand_range(k, order)) {
++					SM2err(SM2_F_SM2_DO_ENCRYPT, SM2_R_RANDOM_NUMBER_GENERATION_FAILED);
++					goto cleanup;
++				}
++			} while (BN_is_zero(k));
++		} else
++			k = k_in;
++
++		/* compute C1 */
++		if (!EC_POINT_mul(group, C1, k, NULL, NULL, ctx)) {
++			SM2err(SM2_F_SM2_DO_ENCRYPT, ERR_R_EC_LIB);
++			goto cleanup;
++		}
++		if (!EC_POINT_get_affine_coordinates_GFp(group, C1, x, y, ctx)) {
++			SM2err(SM2_F_SM2_DO_ENCRYPT, ERR_R_EC_LIB);
++			goto cleanup;
++		}	
++		to[0] = POINT_CONVERSION_UNCOMPRESSED;
++		if (!BN_bn2bin(x, to + 1)) {
++			SM2err(SM2_F_SM2_DO_ENCRYPT, ERR_R_BN_LIB);
++			goto cleanup;
++		}
++		if (!BN_bn2bin(y, to + 1 + xylen)) {
++			SM2err(SM2_F_SM2_DO_ENCRYPT, ERR_R_BN_LIB);
++			goto cleanup;
++		}		
++		/* check whether S is the point at infinity */
++		if (!EC_GROUP_get_cofactor(group, h, ctx)) {
++			SM2err(SM2_F_SM2_DO_ENCRYPT, ERR_R_EC_LIB);
++			goto cleanup;
++		}
++
++		if (!EC_POINT_mul(group, S, NULL, pubkey, h, ctx) ||
++			EC_POINT_is_at_infinity(group, S)) {
++			SM2err(SM2_F_SM2_DO_ENCRYPT, ERR_R_EC_LIB);
++			goto cleanup;
++		}
++		/* compute t=KDF(x||y, flen) */
++		if (!EC_POINT_mul(group, S, NULL, pubkey, k, ctx)) {
++			SM2err(SM2_F_SM2_DO_ENCRYPT, ERR_R_EC_LIB);
++			goto cleanup;
++		}
++		if (!EC_POINT_get_affine_coordinates_GFp(group, S, x, y, ctx)) {
++			SM2err(SM2_F_SM2_DO_ENCRYPT, ERR_R_EC_LIB);
++			goto cleanup;
++		}
++
++		if (!temp)
++			temp = (unsigned char *)OPENSSL_malloc(2 * xylen);
++		if (!BN_bn2bin(x, temp)) {
++			SM2err(SM2_F_SM2_DO_ENCRYPT, ERR_R_BN_LIB);
++			goto cleanup;
++		}
++		if (!BN_bn2bin(y, temp + xylen)) {
++			SM2err(SM2_F_SM2_DO_ENCRYPT, ERR_R_BN_LIB);
++			goto cleanup;
++		}
++		if (!t)
++			t = (unsigned char *)OPENSSL_malloc(flen);
++		memset(t, 0, flen);
++		KDF(temp, 2 * xylen, flen, t);
++		for(i = 0; i < flen && t[i] == 0; ++i);
++	} while(i == flen);
++
++	/* compute C3 */
++	c = to + 1 + 2 * xylen;
++	SM3_Init(&sm3_ctx);
++	SM3_Update(&sm3_ctx, temp, xylen);
++	SM3_Update(&sm3_ctx, from, flen);
++	SM3_Update(&sm3_ctx, temp + xylen, xylen);
++	SM3_Final(c, &sm3_ctx);
++	OPENSSL_cleanse(&sm3_ctx, sizeof(sm3_ctx));
++
++	/* compute C2 */
++	c += SM3_DIGEST_LENGTH;
++	for (i = 0; i < flen; ++i)
++		c[i] = from[i] ^ t[i];
++	ret = olen;
++
++cleanup:
++	if (ctx) BN_CTX_free(ctx);
++	if (order) BN_free(order);
++	if (!k_in) BN_free(k);
++	if (x) BN_free(x);
++	if (y) BN_free(y);
++	if (h) BN_free(h);
++	if (C1) EC_POINT_free(C1);
++	if (S) EC_POINT_free(S);
++	if (temp) OPENSSL_free(temp);
++	if (t) OPENSSL_free(t);
++
++	return ret;
++}
++
++int sm2_do_encrypt(int flen, const unsigned char *from,
++	unsigned char *to, EC_KEY *eckey)
++{
++	return sm2_do_encrypt_ex(flen, from, to, eckey, NULL);
++}
++
++int sm2_do_decrypt(int flen, const unsigned char *from,
++	unsigned char *to, EC_KEY *eckey)
++{
++	const EC_GROUP *group;
++	const BIGNUM *prikey;
++
++	int xylen = 0, olen, ret = -1;
++	BN_CTX *ctx = BN_CTX_new();
++	BIGNUM *x = BN_new();
++	BIGNUM *y = BN_new();
++	BIGNUM *h = BN_new();
++	EC_POINT *C1, *S;
++
++	unsigned int i = 0;
++	unsigned char *t = NULL, *temp = NULL;
++	const unsigned char *p;
++	SM3_CTX sm3_ctx;
++	unsigned char u[SM3_DIGEST_LENGTH] = {0,};
++
++	/* check input values */
++	if (eckey == NULL || (group = EC_KEY_get0_group(eckey)) == NULL ||
++	    (prikey = EC_KEY_get0_private_key(eckey)) == NULL || to == NULL) {
++		SM2err(SM2_F_SM2_DO_DECRYPT, SM2_R_MISSING_PARAMETERS);
++		return -1;
++	}
++
++	/*  */
++	if (POINT_CONVERSION_UNCOMPRESSED != from[0]) {
++		SM2err(SM2_F_SM2_DO_DECRYPT, SM2_R_UNSUPPORT_COMPRESSED);
++		goto cleanup;
++	}
++
++	C1 = EC_POINT_new(group);
++	S = EC_POINT_new(group);
++	if (!ctx || !C1 || !x || !y || !h || !S) {
++		SM2err(SM2_F_SM2_DO_DECRYPT, ERR_R_MALLOC_FAILURE);
++		goto cleanup;
++	}	
++
++	xylen = EC_GROUP_get_degree(group) / 8;
++	olen = flen - 1 - 2 * xylen - SM3_DIGEST_LENGTH;
++
++	/* get C1 from cipher */
++	if (!BN_bin2bn(from + 1, xylen, x)) {
++		SM2err(SM2_F_SM2_DO_DECRYPT, ERR_R_BN_LIB);
++		goto cleanup;
++	}
++	if (!BN_bin2bn(from + 1 + xylen, xylen, y)) {
++		SM2err(SM2_F_SM2_DO_DECRYPT, ERR_R_BN_LIB);
++		goto cleanup;
++	}
++	if (!EC_POINT_set_affine_coordinates_GFp(group, C1, x, y, ctx)) {
++		SM2err(SM2_F_SM2_DO_DECRYPT, ERR_R_EC_LIB);
++		goto cleanup;
++	}
++	/* check whether C1 is on curve */
++	if (!EC_POINT_is_on_curve(group, C1, ctx)) {
++		SM2err(SM2_F_SM2_DO_DECRYPT, ERR_R_EC_LIB);
++		goto cleanup;
++	}
++
++	/* check whether S=[h]C1 is the point at infinity */
++	if (!EC_GROUP_get_cofactor(group, h, ctx)) {
++		SM2err(SM2_F_SM2_DO_DECRYPT, ERR_R_EC_LIB);
++		goto cleanup;
++	}
++	if (!EC_POINT_mul(group, S, NULL, C1, h, ctx) ||
++		EC_POINT_is_at_infinity(group, S)) {
++		SM2err(SM2_F_SM2_DO_DECRYPT, ERR_R_EC_LIB);
++		goto cleanup;
++	}
++
++	/* compute [d_B]C1 */
++	if (!EC_POINT_mul(group, S, NULL, C1, prikey, ctx)) {
++		SM2err(SM2_F_SM2_DO_DECRYPT, ERR_R_EC_LIB);
++		goto cleanup;
++	}
++	if (!EC_POINT_get_affine_coordinates_GFp(group, S, x, y, ctx)) {
++		SM2err(SM2_F_SM2_DO_DECRYPT, ERR_R_EC_LIB);
++		goto cleanup;
++	}
++
++	if (!temp)
++		temp = (unsigned char *)OPENSSL_malloc(2 * xylen);
++	if (!BN_bn2bin(x, temp)) {
++		SM2err(SM2_F_SM2_DO_DECRYPT, ERR_R_BN_LIB);
++		goto cleanup;
++	}
++	if (!BN_bn2bin(y, temp + xylen)) {
++		SM2err(SM2_F_SM2_DO_DECRYPT, ERR_R_BN_LIB);
++		goto cleanup;
++	}
++
++	/* compute t=KDF(x||y, olen) */
++	if (!t)
++		t = (unsigned char *)OPENSSL_malloc(olen);
++	memset(t, 0, olen);
++
++	KDF(temp, 2 * xylen, olen, t);
++	/* t must be not all of zero */
++	for(i = 0; i < flen && t[i] == 0; ++i);
++	if (i == flen) {
++		SM2err(SM2_F_SM2_DO_DECRYPT, SM2_R_DECRYPT_FAILED);
++		goto cleanup;
++	}
++
++	p = from + 1 + 2 * xylen + SM3_DIGEST_LENGTH;
++	for (i = 0; i < olen; ++i)
++		to[i] = p[i] ^ t[i];
++
++	/* compute u=Hash(x||M'||y), and u must be equal to C3 */
++	SM3_Init(&sm3_ctx);
++	SM3_Update(&sm3_ctx, temp, xylen);
++	SM3_Update(&sm3_ctx, to, olen);
++	SM3_Update(&sm3_ctx, temp + xylen, xylen);
++	SM3_Final(u, &sm3_ctx);
++	OPENSSL_cleanse(&sm3_ctx, sizeof(sm3_ctx));
++
++	p -= SM3_DIGEST_LENGTH;
++	if (memcmp(u, p, SM3_DIGEST_LENGTH)) {
++		SM2err(SM2_F_SM2_DO_DECRYPT, SM2_R_DECRYPT_FAILED);
++		goto cleanup;
++	}
++	ret = olen;
++
++cleanup:
++	if (ctx) BN_CTX_free(ctx);
++	if (x) BN_free(x);
++	if (y) BN_free(y);
++	if (h) BN_free(h);
++	if (C1) EC_POINT_free(C1);
++	if (S) EC_POINT_free(S);
++	if (temp) OPENSSL_free(temp);
++	if (t) OPENSSL_free(t);
++
++	return ret;
++}
++
++static SM2_METHOD openssl_sm2_meth = {
++	"OpenSSL SM2 method",
++	sm2_do_sign,
++	sm2_sign_setup,
++	sm2_do_verify,
++	sm2_do_encrypt,
++	sm2_do_decrypt,
++	0,    /* flags    */
++	NULL  /* app_data */
++};
++
++const SM2_METHOD *SM2_OpenSSL(void)
++{
++	return &openssl_sm2_meth;
++}
+
+Property changes on: openssl-1.0.1e/crypto/sm2/sm2_ossl.c
+___________________________________________________________________
+Added: svn:executable
+   + *
+
+Index: openssl-1.0.1e/crypto/sm2/sm2_asn1.c
+===================================================================
+--- openssl-1.0.1e/crypto/sm2/sm2_asn1.c	(revision 0)
++++ openssl-1.0.1e/crypto/sm2/sm2_asn1.c	(revision 0)
+@@ -0,0 +1,14 @@
++/* crypto/sm2/sm2_asn1.c */
++
++#include "sm2_locl.h"
++#include <openssl/err.h>
++#include <openssl/asn1t.h>
++
++ASN1_SEQUENCE(SM2_SIG) = {
++	ASN1_SIMPLE(SM2_SIG, r, CBIGNUM),
++	ASN1_SIMPLE(SM2_SIG, s, CBIGNUM)
++} ASN1_SEQUENCE_END(SM2_SIG)
++
++DECLARE_ASN1_FUNCTIONS_const(SM2_SIG)
++DECLARE_ASN1_ENCODE_FUNCTIONS_const(SM2_SIG, SM2_SIG)
++IMPLEMENT_ASN1_FUNCTIONS_const(SM2_SIG)
+
+Property changes on: openssl-1.0.1e/crypto/sm2/sm2_asn1.c
+___________________________________________________________________
+Added: svn:executable
+   + *
+
+Index: openssl-1.0.1e/crypto/sm2/sm2.h
+===================================================================
+--- openssl-1.0.1e/crypto/sm2/sm2.h	(revision 0)
++++ openssl-1.0.1e/crypto/sm2/sm2.h	(revision 0)
+@@ -0,0 +1,208 @@
++/* crypto/sm2/sm2.h */
++#ifndef HEADER_SM2_H
++#define HEADER_SM2_H
++
++#include <openssl/opensslconf.h>
++
++#ifdef OPENSSL_NO_SM2
++#error SM2 is disabled.
++#endif
++
++#include <openssl/ec.h>
++#include <openssl/ecdsa.h>
++#include <openssl/ossl_typ.h>
++#ifndef OPENSSL_NO_DEPRECATED
++#include <openssl/bn.h>
++#endif
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++#define SM2_BIGNUM_SIZE	32
++
++typedef struct SM2_SIG_st
++{
++	BIGNUM *r;
++	BIGNUM *s;
++} SM2_SIG;
++
++/* This four functions are the same with ECDSA */
++SM2_SIG *SM2_SIG_new(void);
++void	  SM2_SIG_free(SM2_SIG *sig);
++int	  i2d_SM2_SIG(const SM2_SIG *sig, unsigned char **pp);
++SM2_SIG *d2i_SM2_SIG(SM2_SIG **sig, const unsigned char **pp, long len);
++
++int SM2_sign_pre_process(const EC_KEY *ec, unsigned char *Z);
++
++/** Computes the SM2 signature of the given hash value using
++ *  the supplied private key and returns the created signature.
++ *  \param  dgst      pointer to the hash value
++ *  \param  dgst_len  length of the hash value
++ *  \param  eckey     EC_KEY object containing a private EC key
++ *  \return pointer to a SM2_SIG structure or NULL if an error occurred
++ */
++SM2_SIG *SM2_do_sign(const unsigned char *dgst,int dgst_len,EC_KEY *eckey);
++
++/** Computes SM2 signature of a given hash value using the supplied
++ *  private key (note: sig must point to SM2_size(eckey) bytes of memory).
++ *  \param  dgst     pointer to the hash value to sign
++ *  \param  dgstlen  length of the hash value
++ *  \param  kinv     BIGNUM with a pre-computed inverse k (optional)
++ *  \param  rp       BIGNUM with a pre-computed rp value (optioanl), 
++ *                   see SM2_sign_setup
++ *  \param  eckey    EC_KEY object containing a private EC key
++ *  \return pointer to a SM2_SIG structure or NULL if an error occurred
++ */
++SM2_SIG *SM2_do_sign_ex(const unsigned char *dgst, int dgstlen, 
++		const BIGNUM *kinv, const BIGNUM *rp, EC_KEY *eckey);
++
++/** Verifies that the supplied signature is a valid SM2
++ *  signature of the supplied hash value using the supplied public key.
++ *  \param  dgst      pointer to the hash value
++ *  \param  dgst_len  length of the hash value
++ *  \param  sig       SM2_SIG structure
++ *  \param  eckey     EC_KEY object containing a public EC key
++ *  \return 1 if the signature is valid, 0 if the signature is invalid
++ *          and -1 on error
++ */
++int SM2_do_verify(const unsigned char *dgst, int dgst_len,
++		const SM2_SIG *sig, EC_KEY* eckey);
++
++const SM2_METHOD *SM2_OpenSSL(void);
++
++/** Sets the default SM2 method
++ *  \param  meth  new default SM2_METHOD
++ */
++void	  SM2_set_default_method(const SM2_METHOD *meth);
++
++/** Returns the default SM2 method
++ *  \return pointer to SM2_METHOD structure containing the default method
++ */
++const SM2_METHOD *SM2_get_default_method(void);
++
++/** Sets method to be used for the SM2 operations
++ *  \param  eckey  EC_KEY object
++ *  \param  meth   new method
++ *  \return 1 on success and 0 otherwise 
++ */
++int 	  SM2_set_method(EC_KEY *eckey, const SM2_METHOD *meth);
++
++/** Returns the maximum length of the DER encoded signature
++ *  \param  eckey  EC_KEY object
++ *  \return numbers of bytes required for the DER encoded signature
++ */
++int	  SM2_size(const EC_KEY *eckey);
++
++/** Precompute parts of the signing operation
++ *  \param  eckey  EC_KEY object containing a private EC key
++ *  \param  ctx    BN_CTX object (optional)
++ *  \param  kinv   BIGNUM pointer for the inverse of k
++ *  \param  rp     BIGNUM pointer for x coordinate of k * generator
++ *  \return 1 on success and 0 otherwise
++ */
++int 	  SM2_sign_setup(EC_KEY *eckey, BN_CTX *ctx, BIGNUM **kinv, 
++		BIGNUM **rp);
++
++/** Computes SM2 signature of a given hash value using the supplied
++ *  private key (note: sig must point to SM2_size(eckey) bytes of memory).
++ *  \param  type     this parameter is ignored
++ *  \param  dgst     pointer to the hash value to sign
++ *  \param  dgstlen  length of the hash value
++ *  \param  sig      memory for the DER encoded created signature
++ *  \param  siglen   pointer to the length of the returned signature
++ *  \param  eckey    EC_KEY object containing a private EC key
++ *  \return 1 on success and 0 otherwise
++ */
++int	  SM2_sign(int type, const unsigned char *dgst, int dgstlen, 
++		unsigned char *sig, unsigned int *siglen, EC_KEY *eckey);
++
++
++/** Computes SM2 signature of a given hash value using the supplied
++ *  private key (note: sig must point to SM2_size(eckey) bytes of memory).
++ *  \param  type     this parameter is ignored
++ *  \param  dgst     pointer to the hash value to sign
++ *  \param  dgstlen  length of the hash value
++ *  \param  sig      buffer to hold the DER encoded signature
++ *  \param  siglen   pointer to the length of the returned signature
++ *  \param  kinv     BIGNUM with a pre-computed inverse k (optional)
++ *  \param  rp       BIGNUM with a pre-computed rp value (optioanl), 
++ *                   see SM2_sign_setup
++ *  \param  eckey    EC_KEY object containing a private EC key
++ *  \return 1 on success and 0 otherwise
++ */
++int	  SM2_sign_ex(int type, const unsigned char *dgst, int dgstlen, 
++		unsigned char *sig, unsigned int *siglen, const BIGNUM *kinv,
++		const BIGNUM *rp, EC_KEY *eckey);
++
++/** Verifies that the given signature is valid SM2 signature
++ *  of the supplied hash value using the specified public key.
++ *  \param  type     this parameter is ignored
++ *  \param  dgst     pointer to the hash value 
++ *  \param  dgstlen  length of the hash value
++ *  \param  sig      pointer to the DER encoded signature
++ *  \param  siglen   length of the DER encoded signature
++ *  \param  eckey    EC_KEY object containing a public EC key
++ *  \return 1 if the signature is valid, 0 if the signature is invalid
++ *          and -1 on error
++ */
++int 	  SM2_verify(int type, const unsigned char *dgst, int dgstlen, 
++		const unsigned char *sig, int siglen, EC_KEY *eckey);
++
++int SM2_encrypt(int flen, const unsigned char *from, unsigned char *to, EC_KEY *eckey);
++int SM2_decrypt(int flen, const unsigned char *from, unsigned char *to, EC_KEY *eckey);
++
++/* the standard ex_data functions */
++int 	  SM2_get_ex_new_index(long argl, void *argp, CRYPTO_EX_new 
++		*new_func, CRYPTO_EX_dup *dup_func, CRYPTO_EX_free *free_func);
++int 	  SM2_set_ex_data(EC_KEY *d, int idx, void *arg);
++void 	  *SM2_get_ex_data(EC_KEY *d, int idx);
++
++
++/* BEGIN ERROR CODES */
++/* The following lines are auto generated by the script mkerr.pl. Any changes
++ * made after this point may be overwritten when the script is next run.
++ */
++void ERR_load_SM2_strings(void);
++
++/* Error codes for the SM2 functions. */
++
++/* Function codes. */
++#define SM2_F_SM2_CHECK				 104
++#define SM2_F_SM2_DATA_NEW_METHOD			 100
++#define SM2_F_SM2_DO_DECRYPT				 106
++#define SM2_F_SM2_DO_ENCRYPT				 105
++#define SM2_F_SM2_DO_SIGN				 101
++#define SM2_F_SM2_DO_VERIFY				 102
++#define SM2_F_SM2_SIGN_SETUP			 103
++
++/* Reason codes. */
++#define SM2_R_BAD_SIGNATURE				 100
++#define SM2_R_DATA_TOO_LARGE_FOR_KEY_SIZE		 101
++#define SM2_R_DECRYPT_FAILED			 102
++#define SM2_R_MISSING_PARAMETERS			 103
++#define SM2_R_NEED_NEW_SETUP_VALUES			 106
++#define SM2_R_NON_FIPS_METHOD				 107
++#define SM2_R_RANDOM_NUMBER_GENERATION_FAILED		 104
++#define SM2_R_SIGNATURE_MALLOC_FAILED			 105
++#define SM2_R_UNSUPPORT_COMPRESSED			 108
++
++//#define SM2_TEST
++#ifdef SM2_TEST
++inline static void sm2_hexdump(const char *desc, const unsigned char *val, int len)
++{
++	int i;
++	printf("%s(%d):\n", desc, len);
++	for(i=0; i<len; i++) {
++		if (i && !(i&0x1F))
++			printf("\n");
++		printf("%02X", val[i]);
++	}
++	printf("\n");
++}
++#endif
++
++#ifdef  __cplusplus
++}
++#endif
++#endif
+
+Property changes on: openssl-1.0.1e/crypto/sm2/sm2.h
+___________________________________________________________________
+Added: svn:executable
+   + *
+
+Index: openssl-1.0.1e/crypto/sm2/sm2_lib.c
+===================================================================
+--- openssl-1.0.1e/crypto/sm2/sm2_lib.c	(revision 0)
++++ openssl-1.0.1e/crypto/sm2/sm2_lib.c	(revision 0)
+@@ -0,0 +1,224 @@
++/* crypto/sm2/sm2_lib.c */
++
++#include <string.h>
++#include "sm2_locl.h"
++#ifndef OPENSSL_NO_ENGINE
++#include <openssl/engine.h>
++#endif
++#include <openssl/err.h>
++#include <openssl/bn.h>
++#ifdef OPENSSL_FIPS
++#include <openssl/fips.h>
++#endif
++
++const char SM2_version[]="SM2" OPENSSL_VERSION_PTEXT;
++
++static const SM2_METHOD *default_SM2_method = NULL;
++
++static void *sm2_data_new(void);
++static void *sm2_data_dup(void *);
++static void  sm2_data_free(void *);
++
++void SM2_set_default_method(const SM2_METHOD *meth)
++{
++	default_SM2_method = meth;
++}
++
++const SM2_METHOD *SM2_get_default_method(void)
++{
++	if(!default_SM2_method) 
++		{
++#ifdef OPENSSL_FIPS
++		if (FIPS_mode())
++			return FIPS_sm2_openssl();
++		else
++			return SM2_OpenSSL();
++#else
++		default_SM2_method = SM2_OpenSSL();
++#endif
++		}
++	return default_SM2_method;
++}
++
++int SM2_set_method(EC_KEY *eckey, const SM2_METHOD *meth)
++{
++	SM2_DATA *sm2;
++
++	sm2 = sm2_check(eckey);
++
++	if (sm2 == NULL)
++		return 0;
++
++#ifndef OPENSSL_NO_ENGINE
++	if (sm2->engine)
++	{
++		ENGINE_finish(sm2->engine);
++		sm2->engine = NULL;
++	}
++#endif
++        sm2->meth = meth;
++
++        return 1;
++}
++
++static SM2_DATA *SM2_DATA_new_method(ENGINE *engine)
++{
++	SM2_DATA *ret;
++
++	ret=(SM2_DATA *)OPENSSL_malloc(sizeof(SM2_DATA));
++	if (ret == NULL)
++	{
++		SM2err(SM2_F_SM2_DATA_NEW_METHOD, ERR_R_MALLOC_FAILURE);
++		return(NULL);
++	}
++
++	ret->init = NULL;
++
++	ret->meth = SM2_get_default_method();
++	ret->engine = engine;
++#ifndef OPENSSL_NO_ENGINE
++	if (!ret->engine)
++		ret->engine = ENGINE_get_default_SM2();
++	if (ret->engine)
++	{
++		ret->meth = ENGINE_get_SM2(ret->engine);
++		if (!ret->meth)
++		{
++			SM2err(SM2_F_SM2_DATA_NEW_METHOD, ERR_R_ENGINE_LIB);
++			ENGINE_finish(ret->engine);
++			OPENSSL_free(ret);
++			return NULL;
++		}
++	}
++#endif
++
++	ret->flags = ret->meth->flags;
++	CRYPTO_new_ex_data(CRYPTO_EX_INDEX_SM2, ret, &ret->ex_data);
++	return(ret);
++}
++
++static void *sm2_data_new(void)
++{
++	return (void *)SM2_DATA_new_method(NULL);
++}
++
++static void *sm2_data_dup(void *data)
++{
++	SM2_DATA *r = (SM2_DATA *)data;
++
++	/* XXX: dummy operation */
++	if (r == NULL)
++		return NULL;
++
++	return sm2_data_new();
++}
++
++static void sm2_data_free(void *data)
++{
++	SM2_DATA *r = (SM2_DATA *)data;
++
++#ifndef OPENSSL_NO_ENGINE
++	if (r->engine)
++		ENGINE_finish(r->engine);
++#endif
++	CRYPTO_free_ex_data(CRYPTO_EX_INDEX_SM2, r, &r->ex_data);
++
++	OPENSSL_cleanse((void *)r, sizeof(SM2_DATA));
++
++	OPENSSL_free(r);
++}
++
++SM2_DATA *sm2_check(EC_KEY *key)
++{
++	SM2_DATA *sm2_data;
++ 
++	void *data = EC_KEY_get_key_method_data(key, sm2_data_dup,
++					sm2_data_free, sm2_data_free);
++	if (data == NULL)
++	{
++		sm2_data = (SM2_DATA *)sm2_data_new();
++		if (sm2_data == NULL)
++			return NULL;
++		data = EC_KEY_insert_key_method_data(key, (void *)sm2_data,
++			   sm2_data_dup, sm2_data_free, sm2_data_free);
++		if (data != NULL)
++			{
++			/* Another thread raced us to install the key_method
++			 * data and won. */
++			sm2_data_free(sm2_data);
++			sm2_data = (SM2_DATA *)data;
++			}
++	}
++	else
++		sm2_data = (SM2_DATA *)data;
++#ifdef OPENSSL_FIPS
++	if (FIPS_mode() && !(sm2_data->flags & SM2_FLAG_FIPS_METHOD)
++			&& !(EC_KEY_get_flags(key) & EC_FLAG_NON_FIPS_ALLOW))
++		{
++		SM2err(SM2_F_SM2_CHECK, SM2_R_NON_FIPS_METHOD);
++		return NULL;
++		}
++#endif
++
++	return sm2_data;
++}
++
++int SM2_size(const EC_KEY *r)
++{
++	int ret,i;
++	ASN1_INTEGER bs;
++	BIGNUM	*order=NULL;
++	unsigned char buf[4];
++	const EC_GROUP *group;
++
++	if (r == NULL)
++		return 0;
++	group = EC_KEY_get0_group(r);
++	if (group == NULL)
++		return 0;
++
++	if ((order = BN_new()) == NULL) return 0;
++	if (!EC_GROUP_get_order(group,order,NULL))
++	{
++		BN_clear_free(order);
++		return 0;
++	} 
++	i=BN_num_bits(order);
++	bs.length=(i+7)/8;
++	bs.data=buf;
++	bs.type=V_ASN1_INTEGER;
++	/* If the top bit is set the asn1 encoding is 1 larger. */
++	buf[0]=0xff;	
++
++	i=i2d_ASN1_INTEGER(&bs,NULL);
++	i+=i; /* r and s */
++	ret=ASN1_object_size(1,i,V_ASN1_SEQUENCE);
++	BN_clear_free(order);
++	return(ret);
++}
++
++
++int SM2_get_ex_new_index(long argl, void *argp, CRYPTO_EX_new *new_func,
++	     CRYPTO_EX_dup *dup_func, CRYPTO_EX_free *free_func)
++{
++	return CRYPTO_get_ex_new_index(CRYPTO_EX_INDEX_SM2, argl, argp,
++				new_func, dup_func, free_func);
++}
++
++int SM2_set_ex_data(EC_KEY *d, int idx, void *arg)
++{
++	SM2_DATA *sm2;
++	sm2 = sm2_check(d);
++	if (sm2 == NULL)
++		return 0;
++	return(CRYPTO_set_ex_data(&sm2->ex_data,idx,arg));
++}
++
++void *SM2_get_ex_data(EC_KEY *d, int idx)
++{
++	SM2_DATA *sm2;
++	sm2 = sm2_check(d);
++	if (sm2 == NULL)
++		return NULL;
++	return(CRYPTO_get_ex_data(&sm2->ex_data,idx));
++}
+
+Property changes on: openssl-1.0.1e/crypto/sm2/sm2_lib.c
+___________________________________________________________________
+Added: svn:executable
+   + *
+
+Index: openssl-1.0.1e/crypto/sm2/sm2_err.c
+===================================================================
+--- openssl-1.0.1e/crypto/sm2/sm2_err.c	(revision 0)
++++ openssl-1.0.1e/crypto/sm2/sm2_err.c	(revision 0)
+@@ -0,0 +1,49 @@
++/* crypto/sm2/sm2_err.c */
++
++#include <stdio.h>
++#include <openssl/err.h>
++#include <openssl/sm2.h>
++
++/* BEGIN ERROR CODES */
++#ifndef OPENSSL_NO_ERR
++
++#define ERR_FUNC(func) ERR_PACK(ERR_LIB_SM2,func,0)
++#define ERR_REASON(reason) ERR_PACK(ERR_LIB_SM2,0,reason)
++
++static ERR_STRING_DATA SM2_str_functs[]=
++	{
++{ERR_FUNC(SM2_F_SM2_CHECK),	"SM2_CHECK"},
++{ERR_FUNC(SM2_F_SM2_DATA_NEW_METHOD),	"SM2_DATA_NEW_METHOD"},
++{ERR_FUNC(SM2_F_SM2_DO_SIGN),	"SM2_do_sign"},
++{ERR_FUNC(SM2_F_SM2_DO_VERIFY),	"SM2_do_verify"},
++{ERR_FUNC(SM2_F_SM2_SIGN_SETUP),	"SM2_sign_setup"},
++{0,NULL}
++	};
++
++static ERR_STRING_DATA SM2_str_reasons[]=
++	{
++{ERR_REASON(SM2_R_BAD_SIGNATURE)       ,"bad signature"},
++{ERR_REASON(SM2_R_DATA_TOO_LARGE_FOR_KEY_SIZE),"data too large for key size"},
++{ERR_REASON(SM2_R_DECRYPT_FAILED)          ,"decrypt data failed"},
++{ERR_REASON(SM2_R_MISSING_PARAMETERS)  ,"missing parameters"},
++{ERR_REASON(SM2_R_NEED_NEW_SETUP_VALUES),"need new setup values"},
++{ERR_REASON(SM2_R_NON_FIPS_METHOD)     ,"non fips method"},
++{ERR_REASON(SM2_R_RANDOM_NUMBER_GENERATION_FAILED),"random number generation failed"},
++{ERR_REASON(SM2_R_SIGNATURE_MALLOC_FAILED),"signature malloc failed"},
++{ERR_REASON(SM2_R_UNSUPPORT_COMPRESSED),"unsupport to decrypt compressed data"},
++{0,NULL}
++	};
++
++#endif
++
++void ERR_load_SM2_strings(void)
++{
++#ifndef OPENSSL_NO_ERR
++
++	if (ERR_func_error_string(SM2_str_functs[0].error) == NULL)
++	{
++		ERR_load_strings(0,SM2_str_functs);
++		ERR_load_strings(0,SM2_str_reasons);
++	}
++#endif
++}
+
+Property changes on: openssl-1.0.1e/crypto/sm2/sm2_err.c
+___________________________________________________________________
+Added: svn:executable
+   + *
+
+Index: openssl-1.0.1e/crypto/sm2/sm2_crpt.c
+===================================================================
+--- openssl-1.0.1e/crypto/sm2/sm2_crpt.c	(revision 0)
++++ openssl-1.0.1e/crypto/sm2/sm2_crpt.c	(revision 0)
+@@ -0,0 +1,25 @@
++/* crypto/sm2/sm2_crpt.c */
++
++#include "sm2_locl.h"
++
++int SM2_encrypt(int flen, const unsigned char *from, unsigned char *to, EC_KEY *eckey)
++	{
++	SM2_DATA *sm2 = sm2_check(eckey);
++	if (sm2 == NULL)
++		return -1;
++#ifdef SM2_TEST
++	sm2_hexdump("plain", from, flen);
++#endif
++	return (sm2->meth->sm2_do_encrypt(flen, from, to, eckey));
++	}
++
++int SM2_decrypt(int flen, const unsigned char *from, unsigned char *to, EC_KEY *eckey)
++	{
++	SM2_DATA *sm2 = sm2_check(eckey);
++	if (sm2 == NULL)
++		return -1;
++#ifdef SM2_TEST
++	sm2_hexdump("cipher", from, flen);
++#endif
++	return (sm2->meth->sm2_do_decrypt( flen, from,to, eckey));
++	}
+
+Property changes on: openssl-1.0.1e/crypto/sm2/sm2_crpt.c
+___________________________________________________________________
+Added: svn:executable
+   + *
+
+Index: openssl-1.0.1e/crypto/sm2/Makefile
+===================================================================
+--- openssl-1.0.1e/crypto/sm2/Makefile	(revision 0)
++++ openssl-1.0.1e/crypto/sm2/Makefile	(revision 0)
+@@ -0,0 +1,151 @@
++#
++# crypto/sm2/Makefile
++#
++
++DIR=	sm2
++TOP=	../..
++CC=	cc
++INCLUDES= -I.. -I$(TOP) -I../../include
++CFLAG=-g -Wall
++MAKEFILE=	Makefile
++AR=		ar r
++
++CFLAGS= $(INCLUDES) $(CFLAG)
++
++GENERAL=Makefile
++TEST=sm2test.c
++APPS=
++
++LIB=$(TOP)/libsg_crypto.a
++LIBSRC=	sm2_lib.c sm2_asn1.c sm2_ossl.c sm2_sign.c sm2_crpt.c sm2_vrf.c sm2_err.c
++
++LIBOBJ=	sm2_lib.o sm2_asn1.o sm2_ossl.o sm2_sign.o sm2_crpt.o sm2_vrf.o sm2_err.o
++
++SRC= $(LIBSRC)
++
++EXHEADER= sm2.h
++HEADER=	sm2_locl.h $(EXHEADER)
++
++ALL=    $(GENERAL) $(SRC) $(HEADER)
++
++top:
++	(cd ../..; $(MAKE) DIRS=crypto SDIRS=$(DIR) sub_all)
++
++all:	lib
++
++lib:	$(LIBOBJ)
++	$(AR) $(LIB) $(LIBOBJ)
++	$(RANLIB) $(LIB) || echo Never mind.
++	@touch lib
++
++files:
++	$(PERL) $(TOP)/util/files.pl Makefile >> $(TOP)/MINFO
++
++links:
++	@$(PERL) $(TOP)/util/mklink.pl ../../include/openssl $(EXHEADER)
++	@$(PERL) $(TOP)/util/mklink.pl ../../test $(TEST)
++	@$(PERL) $(TOP)/util/mklink.pl ../../apps $(APPS)
++
++install:
++	@[ -n "$(INSTALLTOP)" ] # should be set by top Makefile...
++	@headerlist="$(EXHEADER)"; for i in $$headerlist; \
++	do  \
++	(cp $$i $(INSTALL_PREFIX)$(INSTALLTOP)/include/openssl/$$i; \
++	chmod 644 $(INSTALL_PREFIX)$(INSTALLTOP)/include/openssl/$$i ); \
++	done;
++
++tags:
++	ctags $(SRC)
++
++tests:
++
++lint:
++	lint -DLINT $(INCLUDES) $(SRC)>fluff
++
++depend:
++	@[ -n "$(MAKEDEPEND)" ] # should be set by upper Makefile...
++	$(MAKEDEPEND) -- $(CFLAG) $(INCLUDES) $(DEPFLAG) -- $(PROGS) $(LIBSRC)
++
++dclean:
++	$(PERL) -pe 'if (/^# DO NOT DELETE THIS LINE/) {print; exit(0);}' $(MAKEFILE) >Makefile.new
++	mv -f Makefile.new $(MAKEFILE)
++
++clean:
++	rm -f *.o */*.o *.obj lib tags core .pure .nfs* *.old *.bak fluff
++
++# DO NOT DELETE THIS LINE -- make depend depends on it.
++
++sm2_asn1.o: ../../include/openssl/asn1.h ../../include/openssl/asn1t.h
++sm2_asn1.o: ../../include/openssl/bio.h ../../include/openssl/crypto.h
++sm2_asn1.o: ../../include/openssl/e_os2.h ../../include/openssl/ec.h
++sm2_asn1.o: ../../include/openssl/sm2.h ../../include/openssl/err.h
++sm2_asn1.o: ../../include/openssl/lhash.h ../../include/openssl/opensslconf.h
++sm2_asn1.o: ../../include/openssl/opensslv.h ../../include/openssl/ossl_typ.h
++sm2_asn1.o: ../../include/openssl/safestack.h ../../include/openssl/stack.h
++sm2_asn1.o: ../../include/openssl/symhacks.h sm2_asn1.c sm2_locl.h
++sm2_err.o: ../../include/openssl/asn1.h ../../include/openssl/bio.h
++sm2_err.o: ../../include/openssl/crypto.h ../../include/openssl/e_os2.h
++sm2_err.o: ../../include/openssl/ec.h ../../include/openssl/sm2.h
++sm2_err.o: ../../include/openssl/err.h ../../include/openssl/lhash.h
++sm2_err.o: ../../include/openssl/opensslconf.h ../../include/openssl/opensslv.h
++sm2_err.o: ../../include/openssl/ossl_typ.h ../../include/openssl/safestack.h
++sm2_err.o: ../../include/openssl/stack.h ../../include/openssl/symhacks.h
++sm2_err.o: sm2_err.c
++sm2_lib.o: ../../include/openssl/asn1.h ../../include/openssl/bio.h
++sm2_lib.o: ../../include/openssl/bn.h ../../include/openssl/buffer.h
++sm2_lib.o: ../../include/openssl/crypto.h ../../include/openssl/e_os2.h
++sm2_lib.o: ../../include/openssl/ec.h ../../include/openssl/ecdh.h
++sm2_lib.o: ../../include/openssl/sm2.h ../../include/openssl/engine.h
++sm2_lib.o: ../../include/openssl/err.h ../../include/openssl/evp.h
++sm2_lib.o: ../../include/openssl/lhash.h ../../include/openssl/obj_mac.h
++sm2_lib.o: ../../include/openssl/objects.h ../../include/openssl/opensslconf.h
++sm2_lib.o: ../../include/openssl/opensslv.h ../../include/openssl/ossl_typ.h
++sm2_lib.o: ../../include/openssl/pkcs7.h ../../include/openssl/safestack.h
++sm2_lib.o: ../../include/openssl/sha.h ../../include/openssl/stack.h
++sm2_lib.o: ../../include/openssl/symhacks.h ../../include/openssl/x509.h
++sm2_lib.o: ../../include/openssl/x509_vfy.h sm2_lib.c sm2_locl.h
++sm2_ossl.o: ../../include/openssl/asn1.h ../../include/openssl/bio.h
++sm2_ossl.o: ../../include/openssl/bn.h ../../include/openssl/crypto.h
++sm2_ossl.o: ../../include/openssl/e_os2.h ../../include/openssl/ec.h
++sm2_ossl.o: ../../include/openssl/sm2.h ../../include/openssl/err.h
++sm2_ossl.o: ../../include/openssl/lhash.h ../../include/openssl/obj_mac.h
++sm2_ossl.o: ../../include/openssl/opensslconf.h
++sm2_ossl.o: ../../include/openssl/opensslv.h ../../include/openssl/ossl_typ.h
++sm2_ossl.o: ../../include/openssl/safestack.h ../../include/openssl/stack.h
++sm2_ossl.o: ../../include/openssl/symhacks.h sm2_locl.h sm2_ossl.c
++sm2_sign.o: ../../include/openssl/asn1.h ../../include/openssl/bio.h
++sm2_sign.o: ../../include/openssl/buffer.h ../../include/openssl/crypto.h
++sm2_sign.o: ../../include/openssl/e_os2.h ../../include/openssl/ec.h
++sm2_sign.o: ../../include/openssl/sm2.h ../../include/openssl/engine.h
++sm2_sign.o: ../../include/openssl/evp.h ../../include/openssl/lhash.h
++sm2_sign.o: ../../include/openssl/obj_mac.h ../../include/openssl/objects.h
++sm2_sign.o: ../../include/openssl/opensslconf.h ../../include/openssl/opensslv.h
++sm2_sign.o: ../../include/openssl/ossl_typ.h ../../include/openssl/pkcs7.h
++sm2_sign.o: ../../include/openssl/rand.h ../../include/openssl/safestack.h
++sm2_sign.o: ../../include/openssl/sha.h ../../include/openssl/stack.h
++sm2_sign.o: ../../include/openssl/symhacks.h ../../include/openssl/x509.h
++sm2_sign.o: ../../include/openssl/x509_vfy.h sm2_locl.h sm2_sign.c
++sm2_crpt.o: ../../include/openssl/asn1.h ../../include/openssl/bio.h
++sm2_crpt.o: ../../include/openssl/buffer.h ../../include/openssl/crypto.h
++sm2_crpt.o: ../../include/openssl/e_os2.h ../../include/openssl/ec.h
++sm2_crpt.o: ../../include/openssl/sm2.h ../../include/openssl/engine.h
++sm2_crpt.o: ../../include/openssl/evp.h ../../include/openssl/lhash.h
++sm2_crpt.o: ../../include/openssl/obj_mac.h ../../include/openssl/objects.h
++sm2_crpt.o: ../../include/openssl/opensslconf.h ../../include/openssl/opensslv.h
++sm2_crpt.o: ../../include/openssl/ossl_typ.h ../../include/openssl/pkcs7.h
++sm2_crpt.o: ../../include/openssl/rand.h ../../include/openssl/safestack.h
++sm2_crpt.o: ../../include/openssl/sha.h ../../include/openssl/stack.h
++sm2_crpt.o: ../../include/openssl/symhacks.h ../../include/openssl/x509.h
++sm2_crpt.o: ../../include/openssl/x509_vfy.h sm2_locl.h sm2_vrf.c
++sm2_vrf.o: ../../include/openssl/asn1.h ../../include/openssl/bio.h
++sm2_vrf.o: ../../include/openssl/buffer.h ../../include/openssl/crypto.h
++sm2_vrf.o: ../../include/openssl/e_os2.h ../../include/openssl/ec.h
++sm2_vrf.o: ../../include/openssl/sm2.h ../../include/openssl/engine.h 
++sm2_vrf.o: ../../include/openssl/evp.h ../../include/openssl/lhash.h
++sm2_vrf.o: ../../include/openssl/obj_mac.h ../../include/openssl/objects.h
++sm2_vrf.o: ../../include/openssl/opensslconf.h ../../include/openssl/opensslv.h
++sm2_vrf.o: ../../include/openssl/ossl_typ.h ../../include/openssl/pkcs7.h
++sm2_vrf.o: ../../include/openssl/safestack.h ../../include/openssl/sha.h
++sm2_vrf.o: ../../include/openssl/stack.h ../../include/openssl/symhacks.h
++sm2_vrf.o: ../../include/openssl/x509.h ../../include/openssl/x509_vfy.h
++sm2_vrf.o: sm2_locl.h sm2_vrf.c
+
+Property changes on: openssl-1.0.1e/crypto/sm2/Makefile
+___________________________________________________________________
+Added: svn:executable
+   + *
+
+Index: openssl-1.0.1e/crypto/crypto.h
+===================================================================
+--- openssl-1.0.1e/crypto/crypto.h	(revision 22741)
++++ openssl-1.0.1e/crypto/crypto.h	(working copy)
+@@ -323,6 +323,7 @@
+ #define CRYPTO_EX_INDEX_ECDH		13
+ #define CRYPTO_EX_INDEX_COMP		14
+ #define CRYPTO_EX_INDEX_STORE		15
++#define CRYPTO_EX_INDEX_SM2		16
+ 
+ /* Dynamically assigned indexes start from this value (don't use directly, use
+  * via CRYPTO_ex_data_new_class). */
+Index: openssl-1.0.1e/include/openssl/sm2.h
+===================================================================
+--- openssl-1.0.1e/include/openssl/sm2.h	(revision 0)
++++ openssl-1.0.1e/include/openssl/sm2.h	(revision 0)
+@@ -0,0 +1 @@
++link ../../crypto/sm2/sm2.h
+\ No newline at end of file
+
+Property changes on: openssl-1.0.1e/include/openssl/sm2.h
+___________________________________________________________________
+Added: svn:special
+   + *
+
