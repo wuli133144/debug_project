@@ -1,5 +1,5 @@
 #openssl-1.0.1e
-option(OPENSSL_ON "start build event" ON)
+option(OPENSSL_ON "start build event" OFF)
 message(STATUS "=================${PROJECT_SOURCE_DIR}===================")
 if(OPENSSL_ON)
     set(OPENSSL_FILES)

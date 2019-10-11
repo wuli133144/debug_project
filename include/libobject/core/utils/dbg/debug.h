@@ -9,6 +9,7 @@
 #include "debug_console.h"
 #include "debug_network.h"
 #include "debug_log.h"
+#include "debug_businesses.h"
 #include <libobject/user_mode.h>
 #include <libobject/core/utils/ini/iniparser.h>
 
@@ -33,8 +34,6 @@ enum debug_level_enum{
 	DBG_MAX_LEVEL
 };
 
-
-#include "debug_businesses.h"
 
 typedef struct debug_level_info debug_level_info_t;
 typedef struct debugger debugger_t;

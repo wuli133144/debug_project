@@ -42,6 +42,7 @@ static void __free(allocator_t *alloc, void *addr)
 }
 
 #ifdef __JEMALLOC_ALLOC
+#include <jemalloc/jemalloc.h>
 static void *jemalloc_alloc(allocator_t *alloc,uint32_t size)
 {
     return je_malloc(size);
@@ -67,7 +68,7 @@ int allocator_sys_alloc_register(){
     memcpy(&allocator_modules[ALLOCATOR_TYPE_SYS_MALLOC], &salloc, sizeof(allocator_module_t));
     #ifdef __JEMALLOC_ALLOC
         allocator_module_t salloc_jemalloc = {
-        .allocator_type = ALLOCATOR_TYPE_SYS_MALLOC, 
+        .allocator_type = ALLOCATOR_TYPE_CTR_JEMALLOC, 
         .alloc_ops = {
             .init    = NULL, 
             .alloc   = jemalloc_alloc, 

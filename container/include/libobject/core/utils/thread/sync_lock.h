@@ -18,6 +18,7 @@
 #ifndef __SYNC_LOCK_H__
 #define __SYNC_LOCK_H__
 #include <stdio.h>
+#include <pthread.h>
 #include <libobject/user_mode.h>
 #include <libobject/basic_types.h>
 #if (defined(UNIX_USER_MODE) || defined(LINUX_USER_MODE) || defined(ANDROID_USER_MODE) || defined(IOS_USER_MODE) || defined(MAC_USER_MODE))
@@ -38,7 +39,7 @@ typedef struct sync_lock_s{
 		pthread_mutex_t mutex;
 		pthread_rwlock_t rwlock;
 #elif defined(WINDOWS_USER_MODE)
-        CRITIACAL_SECTION cs;
+       CRITIACAL_SECTION cs;
 #endif
 		int b;
 	}lock;

@@ -37,7 +37,12 @@ allocator_t *global_allocator_default;
 allocator_t *allocator_create(uint8_t allocator_type,uint8_t lock_type)
 {
     allocator_t *p;
+    #ifndef __JEMALLOC_ALLOC
     p = (allocator_t *)malloc(sizeof(allocator_t));
+    #else 
+    #include <jemalloc/jemalloc.h>
+    p = (allocator_t *)je_malloc(sizeof(allocator_t));
+    #endif 
     if(p == NULL){
         dbg_str(DBG_ERROR,"allocator_create");
         return p;
@@ -73,7 +78,11 @@ void allocator_destroy(allocator_t * alloc)
     if(allocator_modules[allocator_type].alloc_ops.destroy){
         allocator_modules[allocator_type].alloc_ops.destroy(alloc);
     }
+    #ifndef __JEMALLOC_ALLOC
     free(alloc);
+    #else
+    je_free(alloc);
+    #endif 
 }
 
 allocator_t * allocator_get_default_alloc()
@@ -93,8 +102,12 @@ int default_allocator_constructor()
         dbg_str(DBG_ERROR,"proxy_create allocator_creator err");
         exit(1);
     }
-#else 
+#else
+    #ifndef  __JEMALLOC_ALLOC
     allocator = allocator_create(ALLOCATOR_TYPE_CTR_MALLOC,1);
+    #else
+    allocator = allocator_create(ALLOCATOR_TYPE_CTR_JEMALLOC,1);
+    #endif 
     allocator_ctr_init(allocator, 0, 8, 0);
 #endif
     global_allocator_default = allocator;

@@ -24,9 +24,9 @@
 /*
  *#define ANDROID_USER_MODE
  */
-/*
- *#define LINUX_USER_MODE
- */
+
+#define LINUX_USER_MODE
+
 /*
  *#define UNIX_USER_MODE
  */

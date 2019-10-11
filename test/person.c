@@ -1,63 +1,6 @@
-#!/bin/bash
-
-#echo "hello world!~"
-
-FILE_NAME=$1
-FILE_NAME_UPPER=$(echo $FILE_NAME | tr '[a-z]' '[A-Z]')
-FILE_NAME_LOWWER=$(echo $FILE_NAME | tr '[A-Z]' '[a-z]')
-CLASS_NAME=$(echo $FILE_NAME_LOWWER | sed -e "s/\b\(.\)/\u\1/g")
-
-#VALID=$(grep -rn "generator" | wc -l)
-
-if [[ -e ${FILE_NAME}.h ]] && [[ -e ${FILE_NAME}.c ]];then
-    echo "file ${FILE_NAME}.h/.c has existed. do u wanna modify it?"
-    exit -1
-fi
- 
- ###############create header file
- if [[ ! -e ${FILE_NAME}.h ]]
- then
-    echo "${FILE_NAME_UPPER}"
-    cat << EOF >> ${FILE_NAME}.h
-    
-#if !defined(__${FILE_NAME_UPPER}_H)
-#define __${FILE_NAME_UPPER}_H
-
-#include <libobject/core/map.h>
-#include <libobject/core/obj.h>
-#include <libobject/core/queue.h>
-#include <libobject/core/utils/dbg/debug.h>
-#include <stdio.h>
-
-typedef struct ${CLASS_NAME}_S ${CLASS_NAME};
-
-struct ${CLASS_NAME}_S
-{
-    Obj obj;
-
-    int (*construct)(${CLASS_NAME} *, char *init_str);
-    int (*deconstruct)(${CLASS_NAME} *);
-    int (*set)(${CLASS_NAME} *, char *attrib, void *value);
-    void *(*get)(void *obj, char *attrib);
-
-    /*virtual methods reimplement*/
-
-    /*
-    */
-};
-
-#endif 
-EOF
-fi
-
-#### create source file *.c 
- if [[ ! -e ${FILE_NAME}.c ]]
- then
-    echo "${FILE_NAME_UPPER}"
-    cat << EOF >> ${FILE_NAME}.c
     
 /**
- * @file ${FILE_NAME}.c
+ * @file person.c
  * @Synopsis  
  * @author 
  * @version 
@@ -87,29 +30,28 @@ fi
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * 
  */
-#include "${FILE_NAME}.h"
+
 #include <libobject/core/utils/config/config.h>
 #include <libobject/core/utils/dbg/debug.h>
 #include <libobject/core/utils/timeval/timeval.h>
+#include "person.h"
 #include <stdio.h>
-#include <unistd.h>
 
-
-static int __construct(${CLASS_NAME} *self, char *init_str)
+static int __construct(Person *self, char *init_str)
 {
     allocator_t *allocator = self->obj.allocator;
-    dbg_str(DBG_DETAIL, "${CLASS_NAME} construct, Person addr:%p", self);
+    dbg_str(DBG_DETAIL, "Person construct, Person addr:%p", self);
 
     return 0;
 }
 
-static int __deconstrcut(${CLASS_NAME} *self)
+static int __deconstrcut(Person *self)
 {
-    dbg_str(DBG_DETAIL, "${CLASS_NAME} deconstruct, stack addr:%p", self);
+    dbg_str(DBG_DETAIL, "Person deconstruct, stack addr:%p", self);
     return 0;
 }
 
-static int __set(${CLASS_NAME} *self, char *attrib, void *value)
+static int __set(Person *self, char *attrib, void *value)
 {
     if (strcmp(attrib, "set") == 0)
     {
@@ -126,37 +68,46 @@ static int __set(${CLASS_NAME} *self, char *attrib, void *value)
     else if (strcmp(attrib, "deconstruct") == 0)
     {
         self->deconstruct = value;
+    } 
+    else if (strcmp(attrib, "print") == 0)
+    {
+        self->print = value;
     }
     else
     {
-        dbg_str(DBG_DETAIL, "${CLASS_NAME} set, not support %s setting", attrib);
+        dbg_str(DBG_DETAIL, "Person set, not support %s setting", attrib);
     }
 
     return 0;
 }
 
-static void *__get(${CLASS_NAME} *self, char *attrib)
+static void *__get(Person *self, char *attrib)
 {
     if (strcmp(attrib, "") == 0)
     {
     }
     else
     {
-        dbg_str(DBG_WARNNING, "${CLASS_NAME} *self get, \"%s\" getting attrib is not supported", attrib);
+        dbg_str(DBG_WARNNING, "Person *self get, \"%s\" getting attrib is not supported", attrib);
         return NULL;
     }
 
     return NULL;
 }
 
-static class_info_entry_t ${CLASS_NAME}_class_info[] = {
+static inline  void __print(Person * self)
+{
+    //printf("");
+    dbg_str(DBG_WARNNING,"Person addr:%p %s\n",self,__FUNCTION__);
+}
+
+static class_info_entry_t Person_class_info[] = {
     [0] = {ENTRY_TYPE_OBJ, "Obj", "obj", NULL, sizeof(void *)},
     [1] = {ENTRY_TYPE_FUNC_POINTER, "", "set", __set, sizeof(void *)},
     [2] = {ENTRY_TYPE_FUNC_POINTER, "", "get", __get, sizeof(void *)},
     [3] = {ENTRY_TYPE_FUNC_POINTER, "", "construct", __construct, sizeof(void *)},
     [4] = {ENTRY_TYPE_FUNC_POINTER, "", "deconstruct", __deconstrcut, sizeof(void *)},
-    [5] = {ENTRY_TYPE_END},
+    [5] = {ENTRY_TYPE_FUNC_POINTER, "", "print", __print, sizeof(void *)},
+    [6] = {ENTRY_TYPE_END},
 };
-REGISTER_CLASS("${CLASS_NAME}", ${CLASS_NAME}_class_info);
-EOF
-fi
+REGISTER_CLASS("Person", Person_class_info);

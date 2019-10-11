@@ -5,7 +5,6 @@
 #include <libobject/core/utils/dbg/debug.h>
 #include <libobject/core/utils/registry/registry.h>
 #include <libobject/libobject.h>
-#include <libobject/concurrent/producer.h>
 
 #define MAX_LIBOBJECT_PATH_LEN 50
 #define DEFAULT_LIBOBJECT_RUN_PATH "/tmp"
