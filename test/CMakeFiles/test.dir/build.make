@@ -75,14 +75,39 @@ CMakeFiles/test.dir/main.c.o.provides: CMakeFiles/test.dir/main.c.o.requires
 
 CMakeFiles/test.dir/main.c.o.provides.build: CMakeFiles/test.dir/main.c.o
 
+CMakeFiles/test.dir/person.c.o: CMakeFiles/test.dir/flags.make
+CMakeFiles/test.dir/person.c.o: person.c
+	$(CMAKE_COMMAND) -E cmake_progress_report /usr/local/test_clibrary/test/CMakeFiles $(CMAKE_PROGRESS_2)
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Building C object CMakeFiles/test.dir/person.c.o"
+	/usr/bin/cc  $(C_DEFINES) $(C_FLAGS) -o CMakeFiles/test.dir/person.c.o   -c /usr/local/test_clibrary/test/person.c
+
+CMakeFiles/test.dir/person.c.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing C source to CMakeFiles/test.dir/person.c.i"
+	/usr/bin/cc  $(C_DEFINES) $(C_FLAGS) -E /usr/local/test_clibrary/test/person.c > CMakeFiles/test.dir/person.c.i
+
+CMakeFiles/test.dir/person.c.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling C source to assembly CMakeFiles/test.dir/person.c.s"
+	/usr/bin/cc  $(C_DEFINES) $(C_FLAGS) -S /usr/local/test_clibrary/test/person.c -o CMakeFiles/test.dir/person.c.s
+
+CMakeFiles/test.dir/person.c.o.requires:
+.PHONY : CMakeFiles/test.dir/person.c.o.requires
+
+CMakeFiles/test.dir/person.c.o.provides: CMakeFiles/test.dir/person.c.o.requires
+	$(MAKE) -f CMakeFiles/test.dir/build.make CMakeFiles/test.dir/person.c.o.provides.build
+.PHONY : CMakeFiles/test.dir/person.c.o.provides
+
+CMakeFiles/test.dir/person.c.o.provides.build: CMakeFiles/test.dir/person.c.o
+
 # Object files for target test
 test_OBJECTS = \
-"CMakeFiles/test.dir/main.c.o"
+"CMakeFiles/test.dir/main.c.o" \
+"CMakeFiles/test.dir/person.c.o"
 
 # External object files for target test
 test_EXTERNAL_OBJECTS =
 
 test: CMakeFiles/test.dir/main.c.o
+test: CMakeFiles/test.dir/person.c.o
 test: CMakeFiles/test.dir/build.make
 test: CMakeFiles/test.dir/link.txt
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --red --bold "Linking C executable test"
@@ -93,6 +118,7 @@ CMakeFiles/test.dir/build: test
 .PHONY : CMakeFiles/test.dir/build
 
 CMakeFiles/test.dir/requires: CMakeFiles/test.dir/main.c.o.requires
+CMakeFiles/test.dir/requires: CMakeFiles/test.dir/person.c.o.requires
 .PHONY : CMakeFiles/test.dir/requires
 
 CMakeFiles/test.dir/clean:

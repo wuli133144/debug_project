@@ -16,6 +16,7 @@
 
 
 #include "person.h"
+#include "message.h"
 
 int main(int argc, char const *argv[])
 {
@@ -26,6 +27,11 @@ int main(int argc, char const *argv[])
     Person * person = OBJECT_NEW(allocator,Person,NULL);
     person->print(person);
     object_destroy(person);
+
+
+    Message *message = OBJECT_NEW(allocator,Message,NULL);
+    message->hello(message);
+    object_destroy(message);
 
     //pause();
 

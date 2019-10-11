@@ -138,6 +138,30 @@ main.c.s:
 	$(MAKE) -f CMakeFiles/test.dir/build.make CMakeFiles/test.dir/main.c.s
 .PHONY : main.c.s
 
+person.o: person.c.o
+.PHONY : person.o
+
+# target to build an object file
+person.c.o:
+	$(MAKE) -f CMakeFiles/test.dir/build.make CMakeFiles/test.dir/person.c.o
+.PHONY : person.c.o
+
+person.i: person.c.i
+.PHONY : person.i
+
+# target to preprocess a source file
+person.c.i:
+	$(MAKE) -f CMakeFiles/test.dir/build.make CMakeFiles/test.dir/person.c.i
+.PHONY : person.c.i
+
+person.s: person.c.s
+.PHONY : person.s
+
+# target to generate assembly for a file
+person.c.s:
+	$(MAKE) -f CMakeFiles/test.dir/build.make CMakeFiles/test.dir/person.c.s
+.PHONY : person.c.s
+
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -150,6 +174,9 @@ help:
 	@echo "... main.o"
 	@echo "... main.i"
 	@echo "... main.s"
+	@echo "... person.o"
+	@echo "... person.i"
+	@echo "... person.s"
 .PHONY : help
 
 

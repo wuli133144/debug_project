@@ -4,12 +4,27 @@
 CMakeFiles/test.dir/main.c.o
  /usr/local/test_clibrary/include/libobject/attrib_priority.h
  /usr/local/test_clibrary/include/libobject/basic_types.h
+ /usr/local/test_clibrary/include/libobject/core/class_deamon.h
+ /usr/local/test_clibrary/include/libobject/core/class_info.h
+ /usr/local/test_clibrary/include/libobject/core/iterator.h
+ /usr/local/test_clibrary/include/libobject/core/list.h
+ /usr/local/test_clibrary/include/libobject/core/map.h
+ /usr/local/test_clibrary/include/libobject/core/obj.h
+ /usr/local/test_clibrary/include/libobject/core/object.h
+ /usr/local/test_clibrary/include/libobject/core/queue.h
  /usr/local/test_clibrary/include/libobject/core/utils/alloc/allocator.h
  /usr/local/test_clibrary/include/libobject/core/utils/alloc/allocator_ctr_alloc.h
  /usr/local/test_clibrary/include/libobject/core/utils/args/cmd_args.h
+ /usr/local/test_clibrary/include/libobject/core/utils/data_structure/hash_list.h
+ /usr/local/test_clibrary/include/libobject/core/utils/data_structure/hash_list_struct.h
  /usr/local/test_clibrary/include/libobject/core/utils/data_structure/link_list.h
  /usr/local/test_clibrary/include/libobject/core/utils/data_structure/link_list_struct.h
  /usr/local/test_clibrary/include/libobject/core/utils/data_structure/list.h
+ /usr/local/test_clibrary/include/libobject/core/utils/data_structure/map.h
+ /usr/local/test_clibrary/include/libobject/core/utils/data_structure/map_struct.h
+ /usr/local/test_clibrary/include/libobject/core/utils/data_structure/rbtree.h
+ /usr/local/test_clibrary/include/libobject/core/utils/data_structure/rbtree_map.h
+ /usr/local/test_clibrary/include/libobject/core/utils/data_structure/rbtree_map_struct.h
  /usr/local/test_clibrary/include/libobject/core/utils/dbg/basic_types.h
  /usr/local/test_clibrary/include/libobject/core/utils/dbg/debug.h
  /usr/local/test_clibrary/include/libobject/core/utils/dbg/debug_businesses.h
@@ -17,6 +32,7 @@ CMakeFiles/test.dir/main.c.o
  /usr/local/test_clibrary/include/libobject/core/utils/dbg/debug_log.h
  /usr/local/test_clibrary/include/libobject/core/utils/dbg/debug_network.h
  /usr/local/test_clibrary/include/libobject/core/utils/ini/iniparser.h
+ /usr/local/test_clibrary/include/libobject/core/utils/json/cjson.h
  /usr/local/test_clibrary/include/libobject/core/utils/registry/reg_heap.h
  /usr/local/test_clibrary/include/libobject/core/utils/registry/registry.h
  /usr/local/test_clibrary/include/libobject/core/utils/thread/sync_lock.h
@@ -24,3 +40,41 @@ CMakeFiles/test.dir/main.c.o
  /usr/local/test_clibrary/include/libobject/test.h
  /usr/local/test_clibrary/include/libobject/user_mode.h
  /usr/local/test_clibrary/test/main.c
+ /usr/local/test_clibrary/test/person.h
+CMakeFiles/test.dir/person.c.o
+ /usr/local/test_clibrary/include/libobject/attrib_priority.h
+ /usr/local/test_clibrary/include/libobject/basic_types.h
+ /usr/local/test_clibrary/include/libobject/core/class_deamon.h
+ /usr/local/test_clibrary/include/libobject/core/class_info.h
+ /usr/local/test_clibrary/include/libobject/core/iterator.h
+ /usr/local/test_clibrary/include/libobject/core/list.h
+ /usr/local/test_clibrary/include/libobject/core/map.h
+ /usr/local/test_clibrary/include/libobject/core/obj.h
+ /usr/local/test_clibrary/include/libobject/core/object.h
+ /usr/local/test_clibrary/include/libobject/core/queue.h
+ /usr/local/test_clibrary/include/libobject/core/utils/alloc/allocator.h
+ /usr/local/test_clibrary/include/libobject/core/utils/alloc/allocator_ctr_alloc.h
+ /usr/local/test_clibrary/include/libobject/core/utils/config/config.h
+ /usr/local/test_clibrary/include/libobject/core/utils/data_structure/hash_list.h
+ /usr/local/test_clibrary/include/libobject/core/utils/data_structure/hash_list_struct.h
+ /usr/local/test_clibrary/include/libobject/core/utils/data_structure/list.h
+ /usr/local/test_clibrary/include/libobject/core/utils/data_structure/map.h
+ /usr/local/test_clibrary/include/libobject/core/utils/data_structure/map_struct.h
+ /usr/local/test_clibrary/include/libobject/core/utils/data_structure/rbtree.h
+ /usr/local/test_clibrary/include/libobject/core/utils/data_structure/rbtree_map.h
+ /usr/local/test_clibrary/include/libobject/core/utils/data_structure/rbtree_map_struct.h
+ /usr/local/test_clibrary/include/libobject/core/utils/dbg/basic_types.h
+ /usr/local/test_clibrary/include/libobject/core/utils/dbg/debug.h
+ /usr/local/test_clibrary/include/libobject/core/utils/dbg/debug_businesses.h
+ /usr/local/test_clibrary/include/libobject/core/utils/dbg/debug_console.h
+ /usr/local/test_clibrary/include/libobject/core/utils/dbg/debug_log.h
+ /usr/local/test_clibrary/include/libobject/core/utils/dbg/debug_network.h
+ /usr/local/test_clibrary/include/libobject/core/utils/ini/iniparser.h
+ /usr/local/test_clibrary/include/libobject/core/utils/json/cjson.h
+ /usr/local/test_clibrary/include/libobject/core/utils/registry/reg_heap.h
+ /usr/local/test_clibrary/include/libobject/core/utils/registry/registry.h
+ /usr/local/test_clibrary/include/libobject/core/utils/thread/sync_lock.h
+ /usr/local/test_clibrary/include/libobject/core/utils/timeval/timeval.h
+ /usr/local/test_clibrary/include/libobject/user_mode.h
+ /usr/local/test_clibrary/test/person.c
+ /usr/local/test_clibrary/test/person.h
