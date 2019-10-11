@@ -33,7 +33,7 @@
 #include <libobject/core/utils/config/config.h>
 #include <libobject/core/utils/timeval/timeval.h>
 #include <libobject/core/utils/dbg/debug.h>
-//#include <libobject/event/event_base.h>
+//
 #include <libobject/io/file.h>
 
 static int __construct(File *file,char *init_str)

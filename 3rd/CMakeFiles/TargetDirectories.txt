@@ -1,0 +1,1 @@
+/usr/local/test_clibrary/3rd/CMakeFiles/openssl.dir

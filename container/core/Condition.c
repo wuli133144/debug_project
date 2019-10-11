@@ -35,7 +35,7 @@
 #include <libobject/core/utils/config/config.h>
 #include <libobject/core/utils/timeval/timeval.h>
 #include <libobject/core/condition.h>
-#include <libobject/event/event_base.h>
+
 #include <libobject/core/thread.h>
 #include <libobject/core/mutex_lock.h>
 #include <libobject/core/linked_queue.h>

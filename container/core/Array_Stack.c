@@ -35,7 +35,7 @@
 #include <libobject/core/utils/config/config.h>
 #include <libobject/core/utils/timeval/timeval.h>
 #include <libobject/core/array_stack.h>
-#include <libobject/event/event_base.h>
+
 
 static int __construct(Stack *stack, char *init_str)
 {
