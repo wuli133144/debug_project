@@ -524,28 +524,28 @@ static void * ringbuffer_consumer(void *arg)
 }
 
 
-static int test_ringbuffer_producer_consumer()
-{
-    allocator_t * allocator = allocator_get_default_alloc();
-    RingBuffer * buffer =   OBJECT_NEW(allocator,RingBuffer ,NULL);
+// static int test_ringbuffer_producer_consumer()
+// {
+//     allocator_t * allocator = allocator_get_default_alloc();
+//     RingBuffer * buffer =   OBJECT_NEW(allocator,RingBuffer ,NULL);
     
-    Thread * producer = OBJECT_NEW(allocator,Thread ,NULL);
-    producer->set_start_arg(producer,buffer);
-    producer->set_start_routine(producer,ringbuffer_producer);
-    producer->start(producer);
-    producer->detach(producer);
+//     Thread * producer = OBJECT_NEW(allocator,Thread ,NULL);
+//     producer->set_start_arg(producer,buffer);
+//     producer->set_start_routine(producer,ringbuffer_producer);
+//     producer->start(producer);
+//     producer->detach(producer);
     
-    Thread * consumer = OBJECT_NEW(allocator,Thread ,NULL);
-    consumer->set_start_arg(consumer,buffer);
-    consumer->set_start_routine(consumer,ringbuffer_consumer);
-    consumer->start(consumer);
-    consumer->detach(consumer);
-    pause();
-    object_destroy(buffer);
-    object_destroy(producer);
-    object_destroy(consumer);
+//     Thread * consumer = OBJECT_NEW(allocator,Thread ,NULL);
+//     consumer->set_start_arg(consumer,buffer);
+//     consumer->set_start_routine(consumer,ringbuffer_consumer);
+//     consumer->start(consumer);
+//     consumer->detach(consumer);
+//     pause();
+//     object_destroy(buffer);
+//     object_destroy(producer);
+//     object_destroy(consumer);
 
-    return 1;
-}
+//     return 1;
+// }
 
-REGISTER_STANDALONE_TEST_FUNC(test_ringbuffer_producer_consumer);
+// REGISTER_STANDALONE_TEST_FUNC(test_ringbuffer_producer_consumer);

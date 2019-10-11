@@ -7,6 +7,7 @@
 int main(int argc, char const *argv[])
 {
     libobject_init();
+    //libobjet
     printf(">>>>>>>>>>>>>");
     return 0;
 }
