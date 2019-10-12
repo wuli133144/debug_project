@@ -53,6 +53,22 @@ int object_config(char *config, int len, char *path, int type, char *name, void 
     obj;\
 })
 
+#define new_object_default(type,set_str) \
+({\
+    void *obj;\
+    int ret;\
+    allocator_t *allocator = allocator_get_default_alloc();\
+    obj = OBJECT_ALLOC(allocator,type);\
+    ret = object_set(obj, #type, set_str);\
+    if( ret < 0) {\
+        dbg_str(DBG_ERROR,"object_set error");\
+        obj = NULL;\
+    } else {\
+        object_init(obj,#type);\
+    }\
+    obj;\
+})
+
 typedef struct object_config_s{
 }object_config_t;
 

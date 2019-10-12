@@ -33,6 +33,10 @@ int main(int argc, char const *argv[])
     message->hello(message);
     object_destroy(message);
 
+    Message *message1 = new_object_default(Message,NULL);
+    message->hello(message);
+    object_destroy(message);
+
     //pause();
 
     return 0;
