@@ -104,11 +104,16 @@ int default_allocator_constructor()
     }
 #else
     #ifndef  __JEMALLOC_ALLOC
-    allocator = allocator_create(ALLOCATOR_TYPE_CTR_MALLOC,1);
+    allocator = allocator_create(ALLOCATOR_TYPE_SYS_MALLOC,1);
+    //allocator_ctr_init(allocator, 0, 8, 0);
+            #if 0
+            allocator = allocator_create(ALLOCATOR_TYPE_CTR_MALLOC,1);
+            allocator_ctr_init(allocator, 0, 8, 0);
+            #endif 
     #else
     allocator = allocator_create(ALLOCATOR_TYPE_CTR_JEMALLOC,1);
     #endif 
-    allocator_ctr_init(allocator, 0, 8, 0);
+    //allocator_ctr_init(allocator, 0, 8, 0);
 #endif
     global_allocator_default = allocator;
 

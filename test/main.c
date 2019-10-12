@@ -47,6 +47,9 @@ int main(int argc, char const *argv[])
     printf("test String %s\n",str->c_str(str));
     str->tolower_impact(str);
     printf("test String %s\n",str->c_str(str));
+
+    str->replace_all(str,"a","A");
+    printf("test String %s\n",str->c_str(str));
     object_destroy(str);
 
     
