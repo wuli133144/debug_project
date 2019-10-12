@@ -14,6 +14,7 @@
 #include <libobject/libobject.h>
 #include <libobject/test.h>
 
+#include <libobject/core/string.h>
 
 #include "person.h"
 #include "message.h"
@@ -38,6 +39,17 @@ int main(int argc, char const *argv[])
     object_destroy(message);
 
     //pause();
+   
+    String * str = new_object_default(String,NULL);
+
+    str->assign(str,"aaaaaaaaaaaaaaaa");
+    //str->toupper_impact(str);
+    printf("test String %s\n",str->c_str(str));
+    str->tolower_impact(str);
+    printf("test String %s\n",str->c_str(str));
+    object_destroy(str);
+
+    
 
     return 0;
 }

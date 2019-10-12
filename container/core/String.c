@@ -112,9 +112,9 @@ static int __set(String *string, char *attrib, void *value)
         string->toupper = value;
     } else if (strcmp(attrib, "toupper_impact") == 0) {
         string->toupper_impact = value;
-    } else if (strcmp(attrib, "lower") == 0) {
+    } else if (strcmp(attrib, "tolower") == 0) {
         string->tolower = value;
-    } else if (strcmp(attrib, "lower_impact") == 0) {
+    } else if (strcmp(attrib, "tolower_impact") == 0) {
         string->tolower_impact = value;
     } else if (strcmp(attrib, "at") == 0) {
         string->at = value;
